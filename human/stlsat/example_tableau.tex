@@ -1,0 +1,36 @@
+\begin{forest}
+  for tree={
+    myleaf/.style={label=below:{#1}},
+    l sep=4mm,
+    s sep=4mm
+  },
+  [{$u_0:\ \glob{[0,4]}a \land \suntil{[4,7]}{b}{\neg a}\mid \mathbf{0}$}
+    [{$u_1:\ \glob{[0,4]}a,\ \suntil{[4,7]}{b}{\neg a}\mid \mathbf{0}$},
+     edge label={node[midway,left,font=\scriptsize]{$\land$}}
+        [{$u_2:\ \mglob{[0,4]}a,\ a,\ \suntil{[4,7]}{b}{\neg a}\mid \mathbf{0}$},
+        edge label={node[midway,left,font=\scriptsize\sffamily]{G}}
+        [{$u_3:\ \glob{[0,4]}a,\ \suntil{[4,7]}{b}{\neg a}\mid \mathbf{1}$},
+            edge label={node[midway,left,font=\scriptsize\sffamily]{STEP}}
+            [{$u_4:\ \glob{[0,4]}a,\ \suntil{[4,7]}{b}{\neg a}\mid \mathbf{4}$},
+            edge label={node[midway,font=\scriptsize\sffamily]{\dots}},
+            no edge
+                [{$u_5:\ a,\ \suntil{[4,7]}{b}{\neg a}\mid \mathbf{4}$},
+                edge label={node[midway,left,font=\scriptsize\sffamily]{G}}
+                [{$u_6:\ a,\ \neg a\mid \mathbf{4}$}, myleaf={\xmark}]
+                [{$u_7:\ a,\ \msuntil{[4,7]}{b}{\neg a},\ b\mid \mathbf{4}$},
+                    edge label={node[midway,left,xshift=-18pt,font=\scriptsize\sffamily]{$\suntilop$}}
+                    [{$u_8:\ \suntil{[4,7]}{b}{\neg a}\mid \mathbf{5}$},
+                    edge label={node[midway,left,font=\scriptsize\sffamily]{STEP}}
+                        [{$u_9:\ \neg a\mid \mathbf{5}$}, label=left:{\cmark}]
+                        [{$u_{10}:\ \msuntil{[4,7]}{b}{\neg a},\ b\mid \mathbf{5}$},
+                        edge label={node[midway,left,xshift=-18pt,font=\scriptsize\sffamily]{$\suntilop$}}
+                        ]
+                    ]
+                ]
+                ]
+            ]
+        ]
+        ]
+    ]
+  ]
+\end{forest}
