@@ -3,11 +3,12 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Jump.Tableau
+import Stlsat.Jump.Soundness
 
 /-!
-# The STL tableau with corrected JUMP
+# The STL tableau with JUMP
 
-This umbrella module currently exports the JUMP tableau definitions. Its
-termination and correctness proofs will be added separately.
+This umbrella module exports the JUMP tableau and its reusable semantic
+infrastructure.  The unconditional soundness theorem is blocked by the
+counterexample documented in `Stlsat.Jump.Soundness`.
 -/

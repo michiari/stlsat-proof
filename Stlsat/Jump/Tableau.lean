@@ -6,10 +6,12 @@ Authors: Michele Chiari
 import Stlsat.Basic.Tableau
 
 /-!
-# The corrected JUMP tableau
+# The JUMP tableau
 
-This file formalizes the corrected `JUMP` rule from the paper, without proving
-its metatheory. It is deliberately parallel to `Stlsat.Basic.Tableau`: adding
+This file formalizes the `JUMP` rule proposed in the paper, with `truth`
+treated as a validity leaf in order to expose atom-free obligations to the
+JUMP guards.  The definitions are deliberately parallel to
+`Stlsat.Basic.Tableau`: adding
 parent metadata to the basic occurrence type or another constructor to
 `BasicRule` would invalidate exhaustive matches throughout the already proved
 basic-tableau development.
@@ -31,10 +33,10 @@ universe u
 /-- A stable address for a syntactic formula occurrence. -/
 abbrev OccurrenceId := List Nat
 
-/-- A path from a formula root to one particular atomic leaf. -/
+/-- A path from a formula root to one particular atom-or-truth leaf. -/
 abbrev FormulaPath := List Nat
 
-/-- One atomic-leaf occurrence and its relative window computed by `tinv`. -/
+/-- One atom-or-truth leaf and its relative window computed by `tinv`. -/
 structure ValidityOccurrence where
   path : FormulaPath
   window : Stlsat.Interval
@@ -82,16 +84,17 @@ namespace FormulaValidity
 variable {Atom : Type u}
 
 /--
-The paper's proposition-validity-interval function `tinv`.
+The proposition-validity-interval function `tinv`, extended so that `truth`
+contributes the same singleton window as an atom.  In particular,
+`tinv (¬⊤)` is now nonempty.
 
-Paths retain the identity of repeated syntactic atom occurrences even when
-their atoms and computed windows coincide. Unary `F` and `G` use their sole
-syntax-tree edge `0`; their windows agree with the strict-until/release
+Paths retain the identity of repeated syntactic leaf occurrences even when
+their formulas and computed windows coincide. Unary `F` and `G` use their
+sole syntax-tree edge `0`; their windows agree with the strict-until/release
 encodings used in the paper.
 -/
 def validityOccurrences : Stlsat.Formula Atom → List ValidityOccurrence
-  | .truth => []
-  | .atom _ =>
+  | .truth | .atom _ =>
       [{ path := [], window := { lower := 0, upper := 0, lower_le_upper := by omega } }]
   | .neg body => (validityOccurrences body).map (ValidityOccurrence.prefixPath 0)
   | .and left right | .or left right =>
@@ -107,6 +110,13 @@ def validityOccurrences : Stlsat.Formula Atom → List ValidityOccurrence
        else []) ++
         (validityOccurrences right).map
           (fun occurrence => ValidityOccurrence.prefixPath 1 (occurrence.through bounds))
+
+/-- `truth` contributes exactly the same base validity occurrence as an atom. -/
+@[simp]
+theorem validityOccurrences_truth_eq_atom (atom : Atom) :
+    validityOccurrences (Stlsat.Formula.truth : Stlsat.Formula Atom) =
+      validityOccurrences (.atom atom) :=
+  rfl
 
 end FormulaValidity
 
@@ -232,7 +242,7 @@ def interval? (occurrence : AnnotatedOccurrence Atom) : Option Stlsat.Interval :
 
 /--
 The edge and invariant repeatedly emitted while a marked obligation is
-postponed. `eventually` has the atom-free invariant `⊤`, so contributes none.
+postponed. Native `eventually` has no explicit invariant entry here.
 -/
 def postponedInvariant? (occurrence : AnnotatedOccurrence Atom) :
     Option (Nat × Stlsat.Formula Atom) :=
@@ -244,7 +254,7 @@ def postponedInvariant? (occurrence : AnnotatedOccurrence Atom) :
 
 /--
 The edge and target that could discharge a marked obligation at an
-intermediate time. `always` has the atom-free releasing target `¬⊤`.
+intermediate time. Native `always` has no explicit releasing-target entry here.
 -/
 def postponedTarget? (occurrence : AnnotatedOccurrence Atom) :
     Option (Nat × Stlsat.Formula Atom) :=
@@ -259,7 +269,7 @@ end AnnotatedOccurrence
 /-- Parent-annotated labels remain finite conjunctive sets. -/
 abbrev Label (Atom : Type u) := Finset (AnnotatedOccurrence Atom)
 
-/-- A node of the tableau with the corrected JUMP rule. -/
+/-- A node of the tableau with the paper's proposed corrected JUMP rule. -/
 structure Node (Atom : Type u) where
   time : Nat
   label : Label Atom
@@ -400,7 +410,7 @@ inductive Expansion {Atom : Type u} [DecidableEq Atom] (node : Node Atom) :
           [selected.child 1 (.unmarked (invariant.temporalExpansion node.time))
             (some selected.reference)]]
 
-/-- A validity window indexed by its canonical, root-relative atomic identity. -/
+/-- A validity window indexed by its canonical, root-relative leaf identity. -/
 structure WindowOccurrence where
   id : OccurrenceId
   window : Stlsat.Interval
@@ -408,7 +418,7 @@ deriving DecidableEq
 
 namespace WindowOccurrence
 
-/-- Attach a relative atom path to the canonical identity of its formula root. -/
+/-- Attach a relative leaf path to the canonical identity of its formula root. -/
 def ofValidity (root : OccurrenceId) (occurrence : ValidityOccurrence) :
     WindowOccurrence where
   id := root ++ occurrence.path
@@ -504,10 +514,10 @@ def WindowsOverlap (left right : WindowOccurrence) : Prop :=
   left.window.lower ≤ right.window.upper ∧ right.window.lower ≤ left.window.upper
 
 /--
-Only windows from different atomic syntax leaves can form a conflict pair.
+Only windows from different atom-or-truth syntax leaves can form a conflict pair.
 This exclusion is needed to make the paper's worked example agree with its
 own limits: an invariant window also occurs inside its governing operator's
-window, but an atomic constraint cannot conflict with itself.
+window, but a constraint cannot conflict with itself.
 -/
 def DistinctAtoms (left right : WindowOccurrence) : Prop := left.id ≠ right.id
 
@@ -607,7 +617,7 @@ def Terminal (semantics : Stlsat.AtomicSemantics Atom) (node : Node Atom) : Prop
 
 end Node
 
-/-- The basic expansion/STEP rules plus the corrected, mutually exclusive JUMP rule. -/
+/-- The basic expansion/STEP rules plus the proposed, mutually exclusive JUMP rule. -/
 inductive Rule {Atom : Type u} [DecidableEq Atom]
     (semantics : Stlsat.AtomicSemantics Atom) (node : Node Atom) : List (Node Atom) → Prop where
   | expand {children : List (Node Atom)} (notRejected : ¬node.Rejected semantics)
@@ -667,7 +677,7 @@ def AllLeavesRejected (semantics : Stlsat.AtomicSemantics Atom) [DecidableEq Ato
 
 end TableauTree
 
-/-- A fully developed tableau whose advancing rule may be STEP or corrected JUMP. -/
+/-- A fully developed tableau whose advancing rule may be STEP or JUMP. -/
 structure Tableau {Atom : Type u} [DecidableEq Atom]
     (semantics : Stlsat.AtomicSemantics Atom) (formula : Stlsat.Formula Atom) where
   tree : TableauTree Atom
