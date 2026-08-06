@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
 import Stlsat.Semantics
-import Stlsat.Termination
+import Stlsat.Basic.Termination
 
 /-!
 # Soundness of the basic STL tableau
