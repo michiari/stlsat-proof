@@ -15,15 +15,11 @@ do not change the proof obligation denoted by an occurrence, so the semantic
 interpretation is inherited from its basic payload.
 
 The ordinary expansion and `STEP` cases are established here.  The genuinely
-new part of JUMP soundness would be the interval argument showing that a model
-can be reconstructed across a multi-step jump.  That statement is isolated
-below as `JumpModelPreserving`, and the rest of the global soundness argument
-is proved conditional on it.
-
-The modified JUMP rule still does *not* satisfy that local statement.  A
-strict-until/release-only counterexample is formalized and documented at the
-end of this file.  Consequently this module deliberately does not assert an
-unconditional soundness theorem.
+new part of JUMP soundness is isolated below as `JumpModelPreserving`, and the
+rest of the global soundness argument is proved conditional on it.  The
+all-live-bounds version of `K(u)` eliminates the earlier counterexample; the
+additional arithmetic and model-transport results are in
+`Stlsat.Jump.LocalSoundness`.
 -/
 
 namespace Stlsat.Jump
@@ -786,6 +782,284 @@ theorem poised_erase {node : Node Atom} (poised : node.Poised) : node.erase.Pois
       exact ⟨_, Expansion.strictReleaseAtEnd selected interval target invariant shape
         selected_mem atEnd⟩
 
+omit [DecidableEq Atom] in
+/-- An eventuality modeled at a later tableau time is modeled at every earlier
+tableau time as well. -/
+theorem eventually_satisfiedFrom_earlier {interval : Stlsat.Interval}
+    {body : Stlsat.Formula Atom} {semantics : Stlsat.AtomicSemantics Atom}
+    {signal : Stlsat.Signal semantics} {start finish : Nat}
+    (leFinish : start ≤ finish)
+    (holds : (Stlsat.Formula.eventually interval body).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.eventually interval body).SatisfiesFrom semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish _ ih => exact ih (Stlsat.Formula.eventually_later holds)
+
+omit [DecidableEq Atom] in
+/-- An always obligation can be transported backwards while its lower endpoint
+has not been passed. -/
+theorem always_satisfiedFrom_earlier_beforeLower {interval : Stlsat.Interval}
+    {body : Stlsat.Formula Atom} {semantics : Stlsat.AtomicSemantics Atom}
+    {signal : Stlsat.Signal semantics} {start finish : Nat}
+    (leFinish : start ≤ finish) (finishLe : finish ≤ interval.lower)
+    (holds : (Stlsat.Formula.always interval body).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.always interval body).SatisfiesFrom semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish _ ih =>
+      exact ih (by omega) (Stlsat.Formula.always_beforeLower (by omega) holds)
+
+omit [DecidableEq Atom] in
+/-- A strict-until obligation can be transported backwards while its lower
+endpoint has not been passed. -/
+theorem strictUntil_satisfiedFrom_earlier_beforeLower {interval : Stlsat.Interval}
+    {invariant target : Stlsat.Formula Atom}
+    {semantics : Stlsat.AtomicSemantics Atom} {signal : Stlsat.Signal semantics}
+    {start finish : Nat} (leFinish : start ≤ finish)
+    (finishLe : finish ≤ interval.lower)
+    (holds : (Stlsat.Formula.strictUntil interval invariant target).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.strictUntil interval invariant target).SatisfiesFrom
+      semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish _ ih =>
+      exact ih (by omega) (Stlsat.Formula.strictUntil_beforeLower (by omega) holds)
+
+omit [DecidableEq Atom] in
+/-- A strict-release obligation can be transported backwards while its lower
+endpoint has not been passed. -/
+theorem strictRelease_satisfiedFrom_earlier_beforeLower {interval : Stlsat.Interval}
+    {target invariant : Stlsat.Formula Atom}
+    {semantics : Stlsat.AtomicSemantics Atom} {signal : Stlsat.Signal semantics}
+    {start finish : Nat} (leFinish : start ≤ finish)
+    (finishLe : finish ≤ interval.lower)
+    (holds : (Stlsat.Formula.strictRelease interval target invariant).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.strictRelease interval target invariant).SatisfiesFrom
+      semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish _ ih =>
+      exact ih (by omega) (Stlsat.Formula.strictRelease_beforeLower (by omega) holds)
+
+omit [DecidableEq Atom] in
+/-- Transport an always obligation backwards, supplying its body at precisely
+the active instants skipped by the transport. -/
+theorem always_satisfiedFrom_earlier {interval : Stlsat.Interval}
+    {body : Stlsat.Formula Atom} {semantics : Stlsat.AtomicSemantics Atom}
+    {signal : Stlsat.Signal semantics} {start finish : Nat}
+    (leFinish : start ≤ finish)
+    (bodyHolds : ∀ instant, start ≤ instant → instant < finish →
+      body.Satisfies semantics signal instant)
+    (holds : (Stlsat.Formula.always interval body).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.always interval body).SatisfiesFrom semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish startLe ih =>
+      apply ih
+      · intro instant instantLe instantLt
+        exact bodyHolds instant instantLe (by omega)
+      · by_cases beforeLower : finish < interval.lower
+        · exact Stlsat.Formula.always_beforeLower beforeLower holds
+        · exact Stlsat.Formula.always_now_later (by omega)
+            (bodyHolds finish startLe (by omega)) holds
+
+omit [DecidableEq Atom] in
+/-- Transport strict until backwards, supplying its invariant at the active
+instants skipped by the transport. -/
+theorem strictUntil_satisfiedFrom_earlier {interval : Stlsat.Interval}
+    {invariant target : Stlsat.Formula Atom}
+    {semantics : Stlsat.AtomicSemantics Atom} {signal : Stlsat.Signal semantics}
+    {start finish : Nat} (leFinish : start ≤ finish)
+    (invariantHolds : ∀ instant, start ≤ instant → instant < finish →
+      invariant.Satisfies semantics signal instant)
+    (holds : (Stlsat.Formula.strictUntil interval invariant target).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.strictUntil interval invariant target).SatisfiesFrom
+      semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish startLe ih =>
+      apply ih
+      · intro instant instantLe instantLt
+        exact invariantHolds instant instantLe (by omega)
+      · by_cases beforeLower : finish < interval.lower
+        · exact Stlsat.Formula.strictUntil_beforeLower beforeLower holds
+        · exact Stlsat.Formula.strictUntil_later (by omega)
+            (invariantHolds finish startLe (by omega)) holds
+
+omit [DecidableEq Atom] in
+/-- Transport strict release backwards, supplying its invariant at the active
+instants skipped by the transport. -/
+theorem strictRelease_satisfiedFrom_earlier {interval : Stlsat.Interval}
+    {target invariant : Stlsat.Formula Atom}
+    {semantics : Stlsat.AtomicSemantics Atom} {signal : Stlsat.Signal semantics}
+    {start finish : Nat} (leFinish : start ≤ finish)
+    (invariantHolds : ∀ instant, start ≤ instant → instant < finish →
+      invariant.Satisfies semantics signal instant)
+    (holds : (Stlsat.Formula.strictRelease interval target invariant).SatisfiesFrom
+      semantics signal finish) :
+    (Stlsat.Formula.strictRelease interval target invariant).SatisfiesFrom
+      semantics signal start := by
+  induction finish, leFinish using Nat.le_induction with
+  | base => exact holds
+  | succ finish startLe ih =>
+      apply ih
+      · intro instant instantLe instantLt
+        exact invariantHolds instant instantLe (by omega)
+      · by_cases beforeLower : finish < interval.lower
+        · exact Stlsat.Formula.strictRelease_beforeLower beforeLower holds
+        · exact Stlsat.Formula.strictRelease_later
+            (invariantHolds finish startLe (by omega)) holds
+
+/-- At a timely poised node, every unmarked temporal operator is still before
+its lower endpoint. -/
+theorem beforeLower_of_unmarked_temporal {node : Node Atom}
+    (poised : node.Poised) (timely : node.Timely)
+    (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
+    (interval : Stlsat.Interval) (formula : Stlsat.Formula Atom)
+    (shape : occurrence.payload = .unmarked formula)
+    (temporalShape : occurrence.interval? = some interval) :
+    node.time < interval.lower := by
+  have occurrenceTimely := (timely_iff node).mp timely occurrence present
+  by_contra notBefore
+  have active : interval.lower ≤ node.time := by omega
+  apply poised
+  cases occurrence with
+  | mk id payload parent =>
+      simp only at shape
+      subst payload
+      cases formula with
+      | truth => simp [AnnotatedOccurrence.interval?] at temporalShape
+      | atom proposition => simp [AnnotatedOccurrence.interval?] at temporalShape
+      | neg body => simp [AnnotatedOccurrence.interval?] at temporalShape
+      | and left right => simp [AnnotatedOccurrence.interval?] at temporalShape
+      | or left right => simp [AnnotatedOccurrence.interval?] at temporalShape
+      | eventually bounds body =>
+          simp only [AnnotatedOccurrence.interval?, Option.some.injEq] at temporalShape
+          subst bounds
+          have upper : node.time ≤ interval.upper := by
+            simpa [AnnotatedOccurrence.Timely, Stlsat.Occurrence.Timely,
+              Stlsat.Formula.Timely] using occurrenceTimely
+          by_cases beforeEnd : node.time < interval.upper
+          · exact ⟨_, Expansion.eventuallyBeforeEnd _ interval body rfl present active beforeEnd⟩
+          · exact ⟨_, Expansion.eventuallyAtEnd _ interval body rfl present (by omega)⟩
+      | always bounds body =>
+          simp only [AnnotatedOccurrence.interval?, Option.some.injEq] at temporalShape
+          subst bounds
+          have upper : node.time ≤ interval.upper := by
+            simpa [AnnotatedOccurrence.Timely, Stlsat.Occurrence.Timely,
+              Stlsat.Formula.Timely] using occurrenceTimely
+          by_cases beforeEnd : node.time < interval.upper
+          · exact ⟨_, Expansion.alwaysBeforeEnd _ interval body rfl present active beforeEnd⟩
+          · exact ⟨_, Expansion.alwaysAtEnd _ interval body rfl present (by omega)⟩
+      | strictUntil bounds invariant target =>
+          simp only [AnnotatedOccurrence.interval?, Option.some.injEq] at temporalShape
+          subst bounds
+          have upper : node.time ≤ interval.upper := by
+            simpa [AnnotatedOccurrence.Timely, Stlsat.Occurrence.Timely,
+              Stlsat.Formula.Timely] using occurrenceTimely
+          by_cases beforeEnd : node.time < interval.upper
+          · exact ⟨_, Expansion.strictUntilBeforeEnd _ interval invariant target rfl
+              present active beforeEnd⟩
+          · exact ⟨_, Expansion.strictUntilAtEnd _ interval invariant target rfl present
+              (by omega)⟩
+      | strictRelease bounds target invariant =>
+          simp only [AnnotatedOccurrence.interval?, Option.some.injEq] at temporalShape
+          subst bounds
+          have upper : node.time ≤ interval.upper := by
+            simpa [AnnotatedOccurrence.Timely, Stlsat.Occurrence.Timely,
+              Stlsat.Formula.Timely] using occurrenceTimely
+          by_cases beforeEnd : node.time < interval.upper
+          · exact ⟨_, Expansion.strictReleaseBeforeEnd _ interval target invariant rfl
+              present active beforeEnd⟩
+          · exact ⟨_, Expansion.strictReleaseAtEnd _ interval target invariant rfl present
+              (by omega)⟩
+
+/-- With all live endpoints in `K(u)`, no temporal occurrence of a timely
+poised node is discarded by a computed JUMP. -/
+theorem temporal_survives_computed_jump {node : Node Atom} {size : Nat}
+    (poised : node.Poised) (timely : node.Timely)
+    (computed : node.jumpSize? = some size)
+    (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
+    (temporal : occurrence.isTemporal = true) :
+    Node.survivesJump (node.time + size) occurrence = true := by
+  cases occurrence with
+  | mk id payload parent =>
+      cases payload with
+      | unmarked formula =>
+          cases formula with
+          | truth => simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
+              Stlsat.Formula.isTemporal] at temporal
+          | atom proposition => simp [AnnotatedOccurrence.isTemporal,
+              Stlsat.Occurrence.isTemporal, Stlsat.Formula.isTemporal] at temporal
+          | neg body => simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
+              Stlsat.Formula.isTemporal] at temporal
+          | and left right => simp [AnnotatedOccurrence.isTemporal,
+              Stlsat.Occurrence.isTemporal, Stlsat.Formula.isTemporal] at temporal
+          | or left right => simp [AnnotatedOccurrence.isTemporal,
+              Stlsat.Occurrence.isTemporal, Stlsat.Formula.isTemporal] at temporal
+          | eventually interval body =>
+              have beforeLower := beforeLower_of_unmarked_temporal poised timely
+                { id := id, payload := .unmarked (.eventually interval body), parent := parent }
+                present interval (.eventually interval body) rfl rfl
+              have destination := node.jump_destination_le_lower _ interval present rfl computed
+                beforeLower
+              simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
+                destination.trans interval.lower_le_upper
+          | always interval body =>
+              have beforeLower := beforeLower_of_unmarked_temporal poised timely
+                { id := id, payload := .unmarked (.always interval body), parent := parent }
+                present interval (.always interval body) rfl rfl
+              have destination := node.jump_destination_le_lower _ interval present rfl computed
+                beforeLower
+              simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
+                destination.trans interval.lower_le_upper
+          | strictUntil interval invariant target =>
+              have beforeLower := beforeLower_of_unmarked_temporal poised timely
+                { id := id,
+                  payload := .unmarked (.strictUntil interval invariant target),
+                  parent := parent }
+                present interval (.strictUntil interval invariant target) rfl rfl
+              have destination := node.jump_destination_le_lower _ interval present rfl computed
+                beforeLower
+              simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
+                destination.trans interval.lower_le_upper
+          | strictRelease interval target invariant =>
+              have beforeLower := beforeLower_of_unmarked_temporal poised timely
+                { id := id,
+                  payload := .unmarked (.strictRelease interval target invariant),
+                  parent := parent }
+                present interval (.strictRelease interval target invariant) rfl rfl
+              have destination := node.jump_destination_le_lower _ interval present rfl computed
+                beforeLower
+              simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
+                destination.trans interval.lower_le_upper
+      | markedEventually interval body =>
+          have future : node.time < interval.upper := by
+            exact (timely_iff node).mp timely _ present
+          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
+      | markedAlways interval body =>
+          have future : node.time < interval.upper := by
+            exact (timely_iff node).mp timely _ present
+          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
+      | markedStrictUntil interval invariant target =>
+          have future : node.time < interval.upper := by
+            exact (timely_iff node).mp timely _ present
+          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
+      | markedStrictRelease interval target invariant =>
+          have future : node.time < interval.upper := by
+            exact (timely_iff node).mp timely _ present
+          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
+
 /-- `STEP` preserves normality, via exact erasure to the basic step. -/
 theorem step_normal {node : Node Atom} (normal : node.InStrictNormalForm) :
     node.step.InStrictNormalForm := by
@@ -925,8 +1199,9 @@ model of its parent.  Keeping it as an explicit proposition separates the
 valid expansion/STEP and tree-induction arguments from the interval argument
 specific to JUMP.
 
-The current rule does not satisfy this proposition; see the counterexample
-below.
+This unrestricted local proposition quantifies over arbitrary annotated nodes,
+including nodes which cannot be derived from an initial formula.  The final
+unconditional proof therefore needs a derivation-sensitive version of it.
 -/
 def JumpModelPreserving {Atom : Type u} [DecidableEq Atom]
     (semantics : Stlsat.AtomicSemantics Atom) : Prop :=
@@ -1091,7 +1366,7 @@ def positive : Stlsat.Formula Atom :=
 def negative : Stlsat.Formula Atom :=
   .strictUntil (singleton 4) delay (.neg (.atom .p))
 
-/-- A strict-until/release-only counterexample to the modified JUMP rule. -/
+/-- The formula from the regression which motivated adding all live bounds to `K`. -/
 def formula : Stlsat.Formula Atom :=
   .and (.strictUntil outerInterval bad positive) negative
 
@@ -1145,11 +1420,10 @@ theorem not_satisfiable (semantics : Stlsat.AtomicSemantics Atom) :
 end SoundnessCounterexample
 
 /-!
-## Soundness blocker
+## All-bounds regression
 
-Treating `truth` like an atom in `validityOccurrences` blocks the original
-counterexample, but it does not make the rule sound.  In
-strict-until/release-only syntax, let
+The formula below was a counterexample before `K(u)` included release and
+always bounds.  In strict-until/release-only syntax, let
 
 * `bad = (¬⊤) sR_[1,1] (¬⊤)`,
 * `delay = ⊤ sR_[2,2] ⊤`,
@@ -1166,8 +1440,8 @@ at time four, while `Fn` requires `¬p` at time four.  The `delay` formulas are
 semantically irrelevant because the invariant prefix of a singleton until is
 empty.
 
-Nevertheless, the generated tableau can postpone the outer until at time zero
-and JUMP directly to time two.  At that poised node:
+Under the old definition, the generated tableau could postpone the outer until
+at time zero and JUMP directly to time two.  At that poised node:
 
 * `N` contains the `bad` window `[1,1]`;
 * `M` contains the outer target's `p` window `[4,4]`;
@@ -1175,12 +1449,11 @@ and JUMP directly to time two.  At that poised node:
 * the independent `Fn` contributes only its syntactically irrelevant
   `delay`-invariant window `[6,6]` to `S`, not its target window `[4,4]`.
 
-Thus both safety guards hold and the computed jump size is two.  At time two,
-satisfying the outer until shifts `Fp` to time six, whereas `Fn` still requires
-`¬p` at time four.  The tableau can check these literals at different times
-and accept.  The defect is that `conflictWindows` records only an independent
-until/release invariant; it can miss a conflicting target whose irrelevant
-invariant has a disjoint validity window.
+With all live bounds, the parent-active occurrence of `bad` contributes its
+release endpoint `1` to `K(u)`.  The theorem
+`Node.jumpSize_le_future_boundCandidate` therefore forces every computed jump
+from time zero to land no later than time one.  The false invariant is exposed
+there, so the former accepting trace is no longer a trace of the rule.
 -/
 
 end Stlsat.Jump
