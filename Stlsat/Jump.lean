@@ -10,6 +10,6 @@ import Stlsat.Jump.Completeness
 # The STL tableau with JUMP
 
 This umbrella module exports the JUMP tableau and its reusable semantic
-infrastructure, the unconditional soundness theorem, and the formal
-counterexample to completeness of the current rule.
+infrastructure, the unconditional soundness theorem, and the completeness-guard
+regression showing that independent target windows disable an unsafe JUMP.
 -/

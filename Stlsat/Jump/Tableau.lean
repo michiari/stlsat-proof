@@ -505,6 +505,25 @@ theorem invariantWindow_mem (node : Node Atom) (occurrence : AnnotatedOccurrence
     ⟨validity, validityMem, rfl⟩, rfl⟩
 
 omit [DecidableEq Atom] in
+/-- Every validity occurrence of a postponed target gives the corresponding
+absolute member of `M(u)`. -/
+theorem targetWindow_mem (node : Node Atom) (occurrence : AnnotatedOccurrence Atom)
+    (present : occurrence ∈ node.label) (edge : Nat) (target : Stlsat.Formula Atom)
+    (shape : occurrence.postponedTarget? = some (edge, target))
+    (validity : ValidityOccurrence)
+    (validityMem : validity ∈ FormulaValidity.validityOccurrences target) :
+    (WindowOccurrence.ofValidity (occurrence.id ++ [edge]) validity).shift node.time ∈
+      node.targetWindows := by
+  classical
+  unfold targetWindows
+  apply List.mem_flatMap.mpr
+  refine ⟨occurrence, Finset.mem_toList.mpr present, ?_⟩
+  rw [shape]
+  simp only [windowsOf, List.mem_map]
+  exact ⟨WindowOccurrence.ofValidity (occurrence.id ++ [edge]) validity,
+    ⟨validity, validityMem, rfl⟩, rfl⟩
+
+omit [DecidableEq Atom] in
 /-- Every validity occurrence of an independent temporal formula gives the
 corresponding member of `O(u)`. -/
 theorem independentWindow_mem (node : Node Atom) (occurrence : AnnotatedOccurrence Atom)
@@ -521,8 +540,8 @@ theorem independentWindow_mem (node : Node Atom) (occurrence : AnnotatedOccurren
     if_true, windowsOf, List.mem_map]
   exact ⟨validity, validityMem, rfl⟩
 
-/-- `S(u)`: windows which could conflict with an intermediate target extraction. -/
-noncomputable def conflictWindows (node : Node Atom) : List WindowOccurrence := by
+/-- Current-time windows of non-parent-active positive and negated atoms. -/
+noncomputable def atomicConflictWindows (node : Node Atom) : List WindowOccurrence := by
   classical
   exact node.label.toList.flatMap fun occurrence =>
     if node.ParentActive occurrence then []
@@ -534,16 +553,33 @@ noncomputable def conflictWindows (node : Node Atom) : List WindowOccurrence := 
       | .unmarked (.neg (.atom _)) =>
           [{ id := occurrence.id ++ [0],
              window := { lower := node.time, upper := node.time, lower_le_upper := by omega } }]
-      | .unmarked (.strictUntil interval invariant _)
-      | .markedStrictUntil interval invariant _ =>
-          windowsThrough (occurrence.id ++ [0]) interval invariant
-      | .unmarked (.strictRelease interval _ invariant)
-      | .markedStrictRelease interval _ invariant =>
-          windowsThrough (occurrence.id ++ [1]) interval invariant
-      | .unmarked (.always interval invariant)
-      | .markedAlways interval invariant =>
-          windowsThrough (occurrence.id ++ [0]) interval invariant
       | _ => []
+
+/--
+`S(u)`: every window in `O(u)`, together with a singleton current-time
+window for each non-parent-active positive or negated atom in the label.
+
+In particular, this includes both invariant- and target-derived validity
+windows of every independent temporal occurrence.  The latter are necessary
+for completeness: otherwise a JUMP may skip the only successful intermediate
+target extraction.
+-/
+noncomputable def conflictWindows (node : Node Atom) : List WindowOccurrence :=
+  node.independentWindows ++ node.atomicConflictWindows
+
+omit [DecidableEq Atom] in
+/-- Every independent validity window belongs to the completeness conflict set. -/
+theorem independentWindow_mem_conflictWindows (node : Node Atom)
+    (window : WindowOccurrence) (present : window ∈ node.independentWindows) :
+    window ∈ node.conflictWindows := by
+  exact List.mem_append.mpr (Or.inl present)
+
+omit [DecidableEq Atom] in
+/-- Every atomic current-time window belongs to the completeness conflict set. -/
+theorem atomicWindow_mem_conflictWindows (node : Node Atom)
+    (window : WindowOccurrence) (present : window ∈ node.atomicConflictWindows) :
+    window ∈ node.conflictWindows := by
+  exact List.mem_append.mpr (Or.inr present)
 
 def WindowsOverlap (left right : WindowOccurrence) : Prop :=
   left.window.lower ≤ right.window.upper ∧ right.window.lower ≤ left.window.upper
@@ -572,6 +608,30 @@ def SoundSafe (node : Node Atom) : Prop :=
 def CompleteSafe (node : Node Atom) : Prop :=
   ∀ target ∈ node.targetWindows, ∀ conflict ∈ node.conflictWindows,
     DistinctAtoms target conflict → ¬WindowsOverlap target conflict
+
+omit [DecidableEq Atom] in
+/-- The revised completeness guard tests postponed targets against every
+window in `O(u)`. -/
+theorem CompleteSafe.disjoint_independent {node : Node Atom}
+    (complete : node.CompleteSafe) {target other : WindowOccurrence}
+    (targetMem : target ∈ node.targetWindows)
+    (otherMem : other ∈ node.independentWindows)
+    (distinct : DistinctAtoms target other) :
+    ¬WindowsOverlap target other :=
+  complete target targetMem other
+    (node.independentWindow_mem_conflictWindows other otherMem) distinct
+
+omit [DecidableEq Atom] in
+/-- The revised completeness guard also tests postponed targets against
+non-parent-active atomic constraints at the current time. -/
+theorem CompleteSafe.disjoint_atomic {node : Node Atom}
+    (complete : node.CompleteSafe) {target atom : WindowOccurrence}
+    (targetMem : target ∈ node.targetWindows)
+    (atomMem : atom ∈ node.atomicConflictWindows)
+    (distinct : DistinctAtoms target atom) :
+    ¬WindowsOverlap target atom :=
+  complete target targetMem atom
+    (node.atomicWindow_mem_conflictWindows atom atomMem) distinct
 
 private def minimum? : List Nat → Option Nat
   | [] => none
