@@ -54,22 +54,10 @@
     Signal Temporal Logic (STL) is a formalism used to describe temporal properties of real‑valued signals in cyber‑physical systems.
     In mission‑ and safety‑critical domains, specifications often consist of large collections of STL formulas, making consistency checking and requirement analysis a major engineering bottleneck. Despite tableau-based satisfiability procedures being a natural solution to solve this problem, we have recently found out that the only existing tree‐shaped tableau for bounded discrete-time STL does not provide a sound satisfiability/unsatisfiability verdict for all possible STL formulas.  In this paper, we pinpoint the flaw in that procedure and present a new tree-shaped tableau which we prove to be \textbf{sound} and \textbf{complete} for bounded discrete‑time STL.  
     
-     On top of this theoretical foundation, we introduce \stlsat{}, an open‑source Rust tool that decides the satisfiability of STL formulas,  synthesizes concrete witness signals, checks the logical implication and equivalence between specifications, and extracts unsatisfiable cores, allowing users to identify inconsistent subsets of requirements for more effective specification debugging.  \stlsat{} also implements enhanced First-Order Logic and Satisfiability Modulo Theories encodings for STL, which allow it to act as a portfolio solver.
+    On top of this theoretical foundation, we introduce \stlsat{}, an open‑source Rust tool that decides the satisfiability of STL formulas,  synthesizes concrete witness signals, checks the logical implication and equivalence between specifications, and extracts unsatisfiable cores, allowing users to identify inconsistent subsets of requirements for more effective specification debugging.  \stlsat{} also implements enhanced First-Order Logic and Satisfiability Modulo Theories encodings for STL, which allow it to act as a portfolio solver.
 
-We evaluate \stlsat{} on an extended benchmark suite (including STL and Mission-time Linear Temporal Logic formulas) that we release publicly.  Across the whole benchmark, the portfolio solver matches or outperforms state‑of‑the‑art tools while preserving correctness guaranteed by our sound tableau procedure.
-
-
-    
- % In mission and safety-critical domains, requirement specifications often comprise large collections of STL formulas, leading to significant challenges in requirement engineering.
- %    Ensuring the consistency of such requirements---i.e., verifying that they are not mutually contradictory---can be achieved through tableau-based satisfiability checking methods.
-    
-    % In this paper, we show that an existing tree-shaped tableau method for discrete-time STL with bounded temporal operators is unsound and provide a novel, corrected version of which we prove soundness and completeness.
-    % Additionally we introduce \stlsat{}, an efficient Rust implementation of our tableau, that enables users to automatically verify the logical consistency of STL requirement sets, synthesize satisfying example signals, and analyse equivalence and implication relations among formulas.
-    % \stlsat{} extends this requirements engineering framework with unsatisfiable core extraction, allowing users to identify minimal inconsistent subsets of requirements for more effective specification debugging.
-    % \stlsat{} also implements enhanced First-Order Logic (FOL) and Satisfiability Modulo Theories (SMT) encodings for STL, which allow it to act as a portfolio solver.
-    % Experimental evaluations on an extended benchmark suite demonstrate that \stlsat{} matches or outperforms state-of-the-art tools in speed and scalability, while maintaining correctness.
+    We evaluate \stlsat{} on an extended benchmark suite (including STL and Mission-time Linear Temporal Logic formulas) that we release publicly.  Across the whole benchmark, the portfolio solver matches or outperforms state‑of‑the‑art tools while preserving correctness guaranteed by our sound tableau procedure.
 \end{abstract}
-
 
 \section{Introduction}
 \label{sec:intro}
@@ -516,7 +504,7 @@ Soundness and completeness of the basic tableau were established in~\cite{Melani
     \end{minipage}%
     \begin{minipage}{0.5\textwidth}
         \small
-        \input{example_tableau}
+        \input{fig/example_tableau}
     \end{minipage}
     \caption{Basic tableau for formula $\glob{[0,4]}a \land \suntil{[4,7]}{b}{\neg a}$.}
     \label{fig:tableau-example}
@@ -574,7 +562,7 @@ They are accessed through the \emph{parent-active} predicate $\pactive$, which w
 We define the proposition validity interval $\tinv(\varphi)$ of a formula $\varphi$, representing the time intervals in which propositions in $\varphi$ may appear. Formally:
 \begin{gather*}
     \begin{aligned}
-        &\tinv(f(R) \bowtie k) = \set{(0,0)} &\qquad
+        &\tinv(f(R) \bowtie k) = \tinv(\top) = \set{(0,0)} &\qquad
         &\tinv(\neg \varphi) = \tinv(\varphi) \\
         &\tinv(\varphi_1 \circ \varphi_2) = \tinv(\varphi_1) \cup \tinv(\varphi_2) &\qquad& \text{with } \circ \in \set{\land, \lor} \\
     \end{aligned} \\
@@ -631,7 +619,7 @@ To guarantee that the \textsf{JUMP} rule preserves the correctness of the algori
 
 \paragraph{Bounds Limit ($k$)} 
 
-The first limit ensures that the jump does not cross a time instant at which an operator without an active parent becomes active or expires.
+The first limit ensures that the jump does not cross a time instant at which an operator becomes active or expires.
 %
 It is defined as
 %
@@ -639,10 +627,9 @@ It is defined as
     k(u) = \min\{t\in K(u)\mid t>t(u)\} - t(u),
 \]
 where the set $K(u)$ collects bounds of temporal operators whose parents are not active in $u$:
-\begin{align*}
-    K(u)=&\ \set{a,b\mid \varphi = \anybinop[\psi]{[a,b]}{\varphi_1}{\varphi_2}\in\Gamma(u),\ \mathsf{B}\in\set{\sreleaseop,\marked{\sreleaseop}},\ \lnot \pactive(\varphi, u)} \\
-    &\cup\set{a, b\mid \anybinop{[a,b]}{\varphi_1}{\varphi_2}\in\Gamma(u),\ \mathsf{B}\in\set{\suntilop,\marked{\suntilop}}}
-\end{align*}
+\[
+    K(u) = \set{a, b\mid \anybinop{[a,b]}{\varphi_1}{\varphi_2}\in\Gamma(u),\ \mathsf{B}\in\set{\suntilop,\marked{\suntilop},\sreleaseop^\psi,\marked{\sreleaseop}^\psi}}
+\]
 
 \paragraph{Soundness Limit ($k^{\ast}_{\text{sound}}$)}
 
@@ -711,36 +698,16 @@ If the same target is emitted at some time $t(u)+j$ with $1 \leq j < k$, its int
 We then collect the validity intervals of propositions that may generate conflicts with a target extraction.
 These consist of propositions already present in the node and the ones generated by non-expired temporal operators without an active parent:
 %
-\begin{align*}
-    S(u) ={}&
-    \bigcup\limits_{\varphi \in \Gamma(u)}
-    \set{
-        (l+a, r+b)
-        \mid
-        (l,r) \in \tinv(\varphi_1),\
-        \varphi = \anybinop{[a,b]}{\varphi_1}{\varphi_2},\
-        \mathsf{B} \in \set{\suntilop,\marked{\suntilop}},\
-        \lnot \pactive(\varphi,u)
-    }
-    \\
-    &\cup
-    \bigcup\limits_{\varphi \in \Gamma(u)}
-    \set{
-        (l+a, r+b) \mid
-        (l,r) \in \tinv(\varphi_1),\
-        \varphi = \anybinop{[a,b]}{\varphi_2}{\varphi_1},\
-        \mathsf{B} \in \set{\sreleaseop,\marked{\sreleaseop}},\
-        \lnot \pactive(\varphi,u)
-    }
-    \\
-    &\cup
+\[
+    S(u) = O(u)
+    \cup
     \set{
         (t(u),t(u)) \mid
         \varphi \in \Gamma(u),\
         \varphi = f(R)\bowtie k \lor \varphi = \neg(f(R)\bowtie k),\
         \lnot\pactive(\varphi,u)
     }.
-\end{align*}
+\]
 
 If an interval in $M(u)$ intersects one in $S(u)$, then we cannot determine when the invariant stops conflicting with the target.
 Since the extraction might be satisfiable at the next instant, we perform a \textsf{STEP}, and disable the \textsf{JUMP} rule whenever:
