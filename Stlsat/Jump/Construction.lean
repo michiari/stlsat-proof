@@ -3,6 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
+import Stlsat.Jump.Completeness
 import Stlsat.Jump.Termination
 
 /-!
@@ -159,6 +160,28 @@ theorem exists_of_strictNormalForm (normal : formula.InStrictNormalForm) :
       (jumpChild_initial_accessible semantics formula) with
     ⟨tree, rooted, wellFormed, terminal⟩
   exact ⟨⟨tree, normal, rooted, wellFormed, terminal⟩⟩
+
+/-- Every strict-normal-form formula has a fully developed JUMP tableau whose
+acceptance is equivalent to satisfiability. -/
+theorem exists_hasAcceptingBranch_iff_satisfiable
+    (normal : formula.InStrictNormalForm) :
+    ∃ tableau : Tableau semantics formula,
+      tableau.HasAcceptingBranch ↔ formula.Satisfiable semantics := by
+  rcases exists_of_strictNormalForm normal with ⟨tableau⟩
+  exact ⟨tableau, tableau.soundness, tableau.completeness⟩
+
+/-- For every fully developed basic tableau, there is a fully developed JUMP
+tableau which accepts exactly when the basic tableau accepts. -/
+theorem exists_hasAcceptingBranch_iff_basic
+    (basic : Stlsat.BasicTableau semantics formula) :
+    ∃ tableau : Tableau semantics formula,
+      tableau.HasAcceptingBranch ↔ basic.HasAcceptingBranch := by
+  rcases exists_of_strictNormalForm basic.root_normal with ⟨tableau⟩
+  refine ⟨tableau, ?_, ?_⟩
+  · intro jumpAccepts
+    exact basic.completeness (tableau.soundness jumpAccepts)
+  · intro basicAccepts
+    exact tableau.completeness (basic.soundness basicAccepts)
 
 end Tableau
 
