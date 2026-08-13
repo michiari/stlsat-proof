@@ -605,6 +605,20 @@ noncomputable def completeLimit? (node : Node Atom) : Option Nat :=
         some (conflict.window.lower - target.window.upper)
       else none)
 
+omit [DecidableEq Atom] in
+/-- If there are no potential conflict windows, the completeness limit is infinite. -/
+theorem completeLimit_eq_none_of_conflictWindows_eq_nil (node : Node Atom)
+    (empty : node.conflictWindows = []) : node.completeLimit? = none := by
+  unfold completeLimit?
+  rw [empty]
+  change minimum?
+    (List.flatMap (fun _ : WindowOccurrence => ([] : List Nat)) node.targetWindows) = none
+  have flattened :
+      List.flatMap (fun _ : WindowOccurrence => ([] : List Nat)) node.targetWindows = [] :=
+    List.flatMap_eq_nil_iff.mpr (fun _ _ => rfl)
+  rw [flattened]
+  rfl
+
 /--
 The final jump size. Unlike the two conflict limits, `k(u)` must be finite:
 when `K(u)` has no future member, this definition returns `none` rather than
@@ -645,6 +659,74 @@ private theorem minimum?_le_of_mem {values : List Nat} {minimum value : Nat}
           rcases present with rfl | tailPresent
           · exact Nat.min_le_left _ _
           · exact (Nat.min_le_right _ _).trans (ih tailMinimum tailPresent)
+
+private theorem minimum?_mem {values : List Nat} {minimum : Nat}
+    (computed : minimum? values = some minimum) : minimum ∈ values := by
+  induction values generalizing minimum with
+  | nil => simp [minimum?] at computed
+  | cons head tail ih =>
+      simp only [minimum?] at computed
+      cases tailMinimum : minimum? tail with
+      | none =>
+          simp only [tailMinimum, Option.some.injEq] at computed
+          subst minimum
+          simp
+      | some other =>
+          simp only [tailMinimum, Option.some.injEq] at computed
+          subst minimum
+          by_cases ordered : head ≤ other
+          · rw [Nat.min_eq_left ordered]
+            simp
+          · rw [Nat.min_eq_right (Nat.le_of_not_ge ordered)]
+            exact List.mem_cons_of_mem head (ih tailMinimum)
+
+private theorem minimum?_eq_some_of_mem_of_le {values : List Nat} {minimum : Nat}
+    (present : minimum ∈ values) (least : ∀ value ∈ values, minimum ≤ value) :
+    minimum? values = some minimum := by
+  cases computed : minimum? values with
+  | none =>
+      have empty := (minimum?_eq_none_iff values).mp computed
+      subst values
+      simp at present
+  | some actual =>
+      have actual_le : actual ≤ minimum :=
+        minimum?_le_of_mem computed present
+      have minimum_le : minimum ≤ actual :=
+        least actual (minimum?_mem computed)
+      have : actual = minimum := Nat.le_antisymm actual_le minimum_le
+      exact congrArg some this
+
+omit [DecidableEq Atom] in
+/--
+Compute a JUMP size without depending on the unspecified order of
+`Finset.toList`: `distance` is the distance to a least future live bound, and
+the two window-derived limits are infinite.
+-/
+theorem jumpSize_eq_of_least_future_bound (node : Node Atom) {distance : Nat}
+    (positive : 0 < distance)
+    (candidate : node.time + distance ∈ node.boundCandidates)
+    (least : ∀ bound ∈ node.boundCandidates, node.time < bound →
+      node.time + distance ≤ bound)
+    (soundInfinite : node.soundLimit? = none)
+    (completeInfinite : node.completeLimit? = none) :
+    node.jumpSize? = some distance := by
+  let distances :=
+    (node.boundCandidates.filter (node.time < ·)).map (· - node.time)
+  have distancePresent : distance ∈ distances := by
+    apply List.mem_map.mpr
+    refine ⟨node.time + distance, ?_, by omega⟩
+    exact List.mem_filter.mpr ⟨candidate, by simpa using positive⟩
+  have distanceLeast : ∀ value ∈ distances, distance ≤ value := by
+    intro value valueMem
+    rcases List.mem_map.mp valueMem with ⟨bound, boundMem, rfl⟩
+    rcases List.mem_filter.mp boundMem with ⟨boundCandidate, future⟩
+    have future' : node.time < bound := by simpa using future
+    have bounded := least bound boundCandidate future'
+    omega
+  have boundsComputed : node.boundsLimit? = some distance := by
+    unfold boundsLimit?
+    exact minimum?_eq_some_of_mem_of_le distancePresent distanceLeast
+  simp [jumpSize?, boundsComputed, soundInfinite, completeInfinite, minLimit]
 
 private theorem minimum?_positive_of_all_positive {values : List Nat} {minimum : Nat}
     (computed : minimum? values = some minimum)
