@@ -126,7 +126,7 @@ theorem postponedTarget_active (node : Node Atom)
   | mk id payload parent =>
       cases payload <;>
         simp_all [AnnotatedOccurrence.postponedTarget?,
-          AnnotatedOccurrence.interval?, Node.MarkedActive,
+          AnnotatedOccurrence.interval?,
           AnnotatedOccurrence.Timely, Stlsat.Occurrence.Timely]
 
 /-- A semantic leaf is valuation-relevant unless it is the constant truth
@@ -167,7 +167,7 @@ theorem satisfies_of_demandingPreserves (formula : Stlsat.Formula Atom)
   apply FormulaValidity.satisfies_of_atomicallyPreserves formula normal semantics holds
   intro occurrence occurrenceMem instant support leafHolds
   by_cases truth : occurrence.leaf = .truth
-  · simpa [truth, FormulaValidity.SignedLeaf.Holds]
+  · simp [truth, FormulaValidity.SignedLeaf.Holds]
   · exact preserves occurrence
       (mem_demandingLeaves occurrenceMem truth) instant support leafHolds
 
@@ -189,7 +189,7 @@ theorem satisfiesFrom_of_demandingPreserves (formula : Stlsat.Formula Atom)
     formula normal semantics holds
   intro occurrence occurrenceMem instant lower upper leafHolds
   by_cases truth : occurrence.leaf = .truth
-  · simpa [truth, FormulaValidity.SignedLeaf.Holds]
+  · simp [truth, FormulaValidity.SignedLeaf.Holds]
   · exact preserves occurrence
       (mem_demandingLeaves occurrenceMem truth) instant lower upper leafHolds
 
@@ -354,13 +354,13 @@ theorem demandingLeaf_covered_by_conflictWindows (node : Node Atom)
                   let window : WindowOccurrence :=
                     ⟨id, ⟨node.time, node.time, le_rfl⟩⟩
                   refine ⟨window, ?_, ?_, le_rfl, le_rfl⟩
-                  apply node.atomicWindow_mem_conflictWindows window
-                  unfold atomicConflictWindows
-                  apply List.mem_flatMap.mpr
-                  refine ⟨⟨id, .unmarked (.atom atom), parent⟩,
-                    Finset.mem_toList.mpr sourceMem, ?_⟩
-                  simp [parentActive, window]
-                  simp [window, FormulaValidity.semanticFrom]
+                  · apply node.atomicWindow_mem_conflictWindows window
+                    unfold atomicConflictWindows
+                    apply List.mem_flatMap.mpr
+                    refine ⟨⟨id, .unmarked (.atom atom), parent⟩,
+                      Finset.mem_toList.mpr sourceMem, ?_⟩
+                    simp [parentActive, window]
+                  · simp [window]
               | neg body =>
                   cases body with
                   | truth =>
@@ -373,7 +373,7 @@ theorem demandingLeaf_covered_by_conflictWindows (node : Node Atom)
                       simp only [AnnotatedOccurrence.formula,
                         FormulaValidity.semanticFrom, List.mem_map] at leafMem
                       rcases leafMem with ⟨base, baseMem, rfl⟩
-                      simp only [FormulaValidity.semanticFrom, List.mem_singleton] at baseMem
+                      simp only [List.mem_singleton] at baseMem
                       subst base
                       let window : WindowOccurrence :=
                         ⟨id ++ [0], ⟨node.time, node.time, le_rfl⟩⟩
@@ -383,9 +383,7 @@ theorem demandingLeaf_covered_by_conflictWindows (node : Node Atom)
                       apply List.mem_flatMap.mpr
                       refine ⟨⟨id, .unmarked (.neg (.atom atom)), parent⟩,
                         Finset.mem_toList.mpr sourceMem, ?_⟩
-                      simp [parentActive, window,
-                        FormulaValidity.SemanticOccurrence.negate,
-                        FormulaValidity.SemanticOccurrence.prefixPath]
+                      simp [parentActive, window]
                   | neg body => simp [AnnotatedOccurrence.InStrictNormalForm,
                       Stlsat.Occurrence.InStrictNormalForm,
                       Stlsat.Formula.InStrictNormalForm] at occurrenceNormal
@@ -903,7 +901,7 @@ theorem hasModel_jump_or_targetOrigin (node : Node Atom)
     intro occurrence occurrenceMem
     simpa [Node.jump] using allHold occurrence occurrenceMem
   · right
-    push_neg at allHold
+    push Not at allHold
     rcases allHold with ⟨occurrence, occurrenceMem, occurrenceFails⟩
     change occurrence ∈ node.jumpLabel size at occurrenceMem
     rcases Finset.mem_image.mp occurrenceMem with ⟨source, retained, rfl⟩
@@ -1086,8 +1084,7 @@ theorem requirement_compatible_model (origin : node.TargetOrigin semantics)
   rcases List.mem_map.mp liveMem with ⟨liveLeaf, liveLeafMem, rfl⟩
   have liveLeafDemanding : Demanding liveLeaf := by
     simpa [Demanding, FormulaValidity.SemanticOccurrence.reroot] using liveDemanding
-  simp only [FormulaValidity.SemanticRequirement.root,
-    FormulaValidity.SemanticOccurrence.reroot, List.nil_append]
+  simp only [FormulaValidity.SemanticOccurrence.reroot]
   by_cases canonical : origin.source.id ++ [origin.edge] ++ targetLeaf.path =
       other.id ++ liveLeaf.path
   · refine ⟨canonical, ?_⟩

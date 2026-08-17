@@ -4,7 +4,7 @@ Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
 import Stlsat.Basic.Termination
-import Stlsat.Jump.Soundness
+import Stlsat.Jump.Semantics
 
 /-!
 # Termination of the STL tableau with JUMP

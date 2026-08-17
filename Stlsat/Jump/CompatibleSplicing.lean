@@ -419,84 +419,6 @@ theorem satisfies_of_atomicallyPreserves (formula : Stlsat.Formula Atom)
 
 variable {semantics : Stlsat.AtomicSemantics Atom}
 
-/-- A modeled formula together with its canonical formula-root identifier. -/
-structure RootedRequirement (semantics : Stlsat.AtomicSemantics Atom) where
-  root : OccurrenceId
-  formula : Stlsat.Formula Atom
-  start : Nat
-  signal : Stlsat.Signal semantics
-  holds : formula.Satisfies semantics signal start
-  normal : formula.InStrictNormalForm
-
-namespace RootedRequirement
-
-def Compatible (left right : RootedRequirement semantics) : Prop :=
-  ∀ leftOccurrence ∈ semanticOccurrences left.formula,
-    ∀ rightOccurrence ∈ semanticOccurrences right.formula,
-      ∀ instant,
-        leftOccurrence.Supports left.start instant →
-        rightOccurrence.Supports right.start instant →
-          left.root ++ leftOccurrence.path = right.root ++ rightOccurrence.path ∧
-            leftOccurrence.leaf = rightOccurrence.leaf
-
-theorem Compatible.symm {left right : RootedRequirement semantics}
-    (compatible : left.Compatible right) : right.Compatible left := by
-  intro rightOccurrence rightMem leftOccurrence leftMem instant rightSupport leftSupport
-  rcases compatible leftOccurrence leftMem rightOccurrence rightMem instant leftSupport
-      rightSupport with ⟨id, leaf⟩
-  exact ⟨id.symm, leaf.symm⟩
-
-end RootedRequirement
-
-variable {Atom : Type u} {semantics : Stlsat.AtomicSemantics Atom}
-
-/-- Pairwise compatible modeled requirements admit a common signal.  At each
-instant the construction chooses one valuation witnessing a demanded signed
-leaf; compatibility guarantees that it witnesses every other demand there. -/
-theorem exists_signal_satisfying_compatible
-    (requirements : List (RootedRequirement semantics))
-    (compatible : ∀ left ∈ requirements, ∀ right ∈ requirements,
-      left ≠ right → left.signal = right.signal ∨ left.Compatible right) :
-    ∃ signal : Stlsat.Signal semantics, ∀ requirement ∈ requirements,
-      requirement.formula.Satisfies semantics signal requirement.start := by
-  classical
-  let DemandAt (instant : Nat) (requirement : RootedRequirement semantics)
-      (occurrence : SemanticOccurrence Atom) : Prop :=
-    requirement ∈ requirements ∧ occurrence ∈ semanticOccurrences requirement.formula ∧
-      occurrence.Supports requirement.start instant ∧
-        occurrence.leaf.Holds semantics (requirement.signal instant)
-  let demanded (instant : Nat) : Prop :=
-    ∃ requirement occurrence, DemandAt instant requirement occurrence
-  let combined : Stlsat.Signal semantics := fun instant =>
-    if existsDemand : demanded instant then
-      (Classical.choose existsDemand).signal instant
-    else Classical.choice semantics.nonempty
-  refine ⟨combined, ?_⟩
-  intro requirement requirementMem
-  apply satisfies_of_atomicallyPreserves requirement.formula requirement.normal semantics
-    requirement.holds
-  intro occurrence occurrenceMem instant supported leafHolds
-  have existsDemand : demanded instant := by
-    refine ⟨requirement, occurrence, requirementMem, occurrenceMem, supported, leafHolds⟩
-  let chosenRequirement : RootedRequirement semantics := Classical.choose existsDemand
-  let chosenOccurrence : SemanticOccurrence Atom := Classical.choose (Classical.choose_spec existsDemand)
-  have chosenDemand : DemandAt instant chosenRequirement chosenOccurrence :=
-    Classical.choose_spec (Classical.choose_spec existsDemand)
-  have combinedEq : combined instant = chosenRequirement.signal instant := by
-    simp only [combined, dif_pos existsDemand, chosenRequirement]
-  rw [combinedEq]
-  by_cases equal : chosenRequirement = requirement
-  · rw [equal]
-    exact leafHolds
-  · rcases compatible chosenRequirement chosenDemand.1 requirement requirementMem equal with
-      sameSignal | relation
-    · rw [sameSignal]
-      exact leafHolds
-    · have related := relation chosenOccurrence chosenDemand.2.1 occurrence occurrenceMem
-          instant chosenDemand.2.2.1 supported
-      rw [← related.2]
-      exact chosenDemand.2.2.2
-
 /-- Signed validity occurrences for absolute tableau satisfaction. -/
 def semanticFrom (time : Nat) : Stlsat.Formula Atom →
     List (SemanticOccurrence Atom)
@@ -776,72 +698,6 @@ theorem satisfiesFrom_of_absoluteAtomicallyPreserves
           omega
         · exact leafHolds
 
-structure AbsoluteRootedRequirement (semantics : Stlsat.AtomicSemantics Atom) where
-  root : OccurrenceId
-  formula : Stlsat.Formula Atom
-  time : Nat
-  signal : Stlsat.Signal semantics
-  holds : formula.SatisfiesFrom semantics signal time
-  normal : formula.InStrictNormalForm
-
-namespace AbsoluteRootedRequirement
-
-def Compatible (left right : AbsoluteRootedRequirement semantics) : Prop :=
-  ∀ leftOccurrence ∈ semanticFrom left.time left.formula,
-    ∀ rightOccurrence ∈ semanticFrom right.time right.formula,
-      ∀ instant,
-        leftOccurrence.window.lower ≤ instant → instant ≤ leftOccurrence.window.upper →
-        rightOccurrence.window.lower ≤ instant → instant ≤ rightOccurrence.window.upper →
-          left.root ++ leftOccurrence.path = right.root ++ rightOccurrence.path ∧
-            leftOccurrence.leaf = rightOccurrence.leaf
-
-end AbsoluteRootedRequirement
-
-theorem exists_signal_satisfying_absolute_compatible
-    (requirements : List (AbsoluteRootedRequirement semantics))
-    (compatible : ∀ left ∈ requirements, ∀ right ∈ requirements,
-      left ≠ right → left.signal = right.signal ∨ left.Compatible right) :
-    ∃ signal : Stlsat.Signal semantics, ∀ requirement ∈ requirements,
-      requirement.formula.SatisfiesFrom semantics signal requirement.time := by
-  classical
-  let DemandAt (instant : Nat) (requirement : AbsoluteRootedRequirement semantics)
-      (occurrence : SemanticOccurrence Atom) : Prop :=
-    requirement ∈ requirements ∧ occurrence ∈ semanticFrom requirement.time requirement.formula ∧
-      occurrence.window.lower ≤ instant ∧ instant ≤ occurrence.window.upper ∧
-        occurrence.leaf.Holds semantics (requirement.signal instant)
-  let demanded (instant : Nat) : Prop :=
-    ∃ requirement occurrence, DemandAt instant requirement occurrence
-  let combined : Stlsat.Signal semantics := fun instant =>
-    if existsDemand : demanded instant then
-      (Classical.choose existsDemand).signal instant
-    else Classical.choice semantics.nonempty
-  refine ⟨combined, ?_⟩
-  intro requirement requirementMem
-  apply satisfiesFrom_of_absoluteAtomicallyPreserves requirement.formula requirement.normal
-    semantics requirement.holds
-  intro occurrence occurrenceMem instant lower upper leafHolds
-  have existsDemand : demanded instant := by
-    exact ⟨requirement, occurrence, requirementMem, occurrenceMem, lower, upper, leafHolds⟩
-  let chosenRequirement : AbsoluteRootedRequirement semantics := Classical.choose existsDemand
-  let chosenOccurrence : SemanticOccurrence Atom :=
-    Classical.choose (Classical.choose_spec existsDemand)
-  have chosenDemand : DemandAt instant chosenRequirement chosenOccurrence :=
-    Classical.choose_spec (Classical.choose_spec existsDemand)
-  have combinedEq : combined instant = chosenRequirement.signal instant := by
-    simp only [combined, dif_pos existsDemand, chosenRequirement]
-  rw [combinedEq]
-  by_cases equal : chosenRequirement = requirement
-  · rw [equal]
-    exact leafHolds
-  · rcases compatible chosenRequirement chosenDemand.1 requirement requirementMem equal with
-      sameSignal | relation
-    · rw [sameSignal]
-      exact leafHolds
-    · have related := relation chosenOccurrence chosenDemand.2.1 occurrence occurrenceMem
-          instant chosenDemand.2.2.1 chosenDemand.2.2.2.1 lower upper
-      rw [← related.2]
-      exact chosenDemand.2.2.2.2
-
 /-- A heterogeneous semantic obligation described solely by absolute signed
 leaf windows and a monotonicity proof.  This common interface accommodates
 both relative STL satisfaction and absolute tableau satisfaction. -/
@@ -875,51 +731,6 @@ theorem Compatible.symm {left right : SemanticRequirement semantics}
   exact ⟨path.symm, leaf.symm⟩
 
 end SemanticRequirement
-
-/-- Heterogeneous compatible semantic obligations admit one common signal. -/
-theorem exists_signal_accepting_semanticRequirements
-    (requirements : List (SemanticRequirement semantics))
-    (compatible : ∀ left ∈ requirements, ∀ right ∈ requirements,
-      left ≠ right → left.signal = right.signal ∨ left.Compatible right) :
-    ∃ signal : Stlsat.Signal semantics, ∀ requirement ∈ requirements,
-      requirement.Accepts signal := by
-  classical
-  let DemandAt (instant : Nat) (requirement : SemanticRequirement semantics)
-      (occurrence : SemanticOccurrence Atom) : Prop :=
-    requirement ∈ requirements ∧ occurrence ∈ requirement.leaves ∧
-      occurrence.window.lower ≤ instant ∧ instant ≤ occurrence.window.upper ∧
-        occurrence.leaf.Holds semantics (requirement.signal instant)
-  let demanded (instant : Nat) : Prop :=
-    ∃ requirement occurrence, DemandAt instant requirement occurrence
-  let combined : Stlsat.Signal semantics := fun instant =>
-    if existsDemand : demanded instant then
-      (Classical.choose existsDemand).signal instant
-    else Classical.choice semantics.nonempty
-  refine ⟨combined, ?_⟩
-  intro requirement requirementMem
-  apply requirement.preserves combined
-  intro occurrence occurrenceMem instant lower upper leafHolds
-  have existsDemand : demanded instant := by
-    exact ⟨requirement, occurrence, requirementMem, occurrenceMem, lower, upper, leafHolds⟩
-  let chosenRequirement : SemanticRequirement semantics := Classical.choose existsDemand
-  let chosenOccurrence : SemanticOccurrence Atom :=
-    Classical.choose (Classical.choose_spec existsDemand)
-  have chosenDemand : DemandAt instant chosenRequirement chosenOccurrence :=
-    Classical.choose_spec (Classical.choose_spec existsDemand)
-  have combinedEq : combined instant = chosenRequirement.signal instant := by
-    simp only [combined, dif_pos existsDemand, chosenRequirement]
-  rw [combinedEq]
-  by_cases equal : chosenRequirement = requirement
-  · rw [equal]
-    exact leafHolds
-  · rcases compatible chosenRequirement chosenDemand.1 requirement requirementMem equal with
-      sameSignal | relation
-    · rw [sameSignal]
-      exact leafHolds
-    · have related := relation chosenOccurrence chosenDemand.2.1 occurrence occurrenceMem
-          instant chosenDemand.2.2.1 chosenDemand.2.2.2.1 lower upper
-      rw [← related.2]
-      exact chosenDemand.2.2.2.2
 
 /-- The choice construction used for finite lists in fact works for an
 arbitrary indexed family.  No compactness argument is involved: at each

@@ -4,6 +4,7 @@ Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
 import Stlsat.Jump.Completeness
+import Stlsat.Jump.Soundness
 import Stlsat.Jump.Termination
 
 /-!

@@ -255,6 +255,7 @@ def CanonicalLeavesValid (node : Node Atom) : Prop :=
         first.id ++ firstLeaf.path = second.id ++ secondLeaf.path →
           firstLeaf.leaf = secondLeaf.leaf
 
+omit [DecidableEq Atom] in
 theorem initial_canonicalLeavesValid (formula : Stlsat.Formula Atom) :
     (Node.initial formula).CanonicalLeavesValid := by
   intro first firstMem second secondMem firstLeaf firstLeafMem secondLeaf secondLeafMem ids
@@ -316,7 +317,8 @@ namespace Expansion
 
 variable {Atom : Type u} [DecidableEq Atom]
 
-private theorem expandedChildSource (formula : Stlsat.Formula Atom) (time edge : Nat)
+omit [DecidableEq Atom] in
+private theorem expandedChildSource (formula : Stlsat.Formula Atom) (time _edge : Nat)
     (fresh : FormulaValidity.SemanticOccurrence Atom)
     (freshMem : fresh ∈ FormulaValidity.semanticOccurrences
       (formula.temporalExpansion time)) :
@@ -651,7 +653,7 @@ theorem jump_canonicalLeavesValid {node : Node Atom} (size : Nat)
     (by simpa [secondFormula] using secondLeafMem)
   simpa [firstId, secondId] using ids
 
-/-- All reachability information used by the unconditional local JUMP proof. -/
+/-- All reachability information used by the local JUMP soundness proof. -/
 def FullDerivationValid (node : Node Atom) : Prop :=
   node.SoundnessDerivationValid ∧ node.CanonicalLeavesValid
 

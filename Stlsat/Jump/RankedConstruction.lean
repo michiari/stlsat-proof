@@ -3,8 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Jump.SemanticFrontier
-import Stlsat.Jump.DerivedSoundness
+import Stlsat.Jump.Canonical
 
 /-! # Rank-stratified construction of skipped invariant models -/
 
@@ -37,7 +36,7 @@ theorem satisfies_shift_iff (formula : Stlsat.Formula Atom)
     formula.Satisfies semantics (shiftSignal signal shift) (start + shift) ↔
       formula.Satisfies semantics signal start := by
   induction formula generalizing start <;>
-    simp_all [Stlsat.Formula.Satisfies, shiftSignal, Nat.add_assoc,
+    simp_all [Stlsat.Formula.Satisfies, shiftSignal,
       Nat.add_comm, Nat.add_left_comm]
 
 theorem satisfies_shift (formula : Stlsat.Formula Atom)

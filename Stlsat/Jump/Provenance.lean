@@ -3,7 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Jump.Coverage
+import Stlsat.Jump.LocalSoundness
 
 /-!
 # Provenance of validity windows
@@ -120,6 +120,7 @@ needs to remain in the label because its complete reference is stored. -/
 def ProvenanceValid (node : Node Atom) : Prop :=
   ∀ occurrence ∈ node.label, occurrence.ParentLinkValid node.time
 
+omit [DecidableEq Atom] in
 theorem initial_provenanceValid (formula : Stlsat.Formula Atom) :
     (Node.initial formula).ProvenanceValid := by
   intro occurrence present
@@ -181,7 +182,7 @@ private theorem directAlwaysChildValid (selected : AnnotatedOccurrence Atom)
   | mk id payload parent =>
       change payload = .unmarked (.always interval body) at shape
       subst payload
-      refine ⟨by simp [AnnotatedOccurrence.reference, AnnotatedOccurrence.formula,
+      refine ⟨by simp [AnnotatedOccurrence.formula,
         Stlsat.Formula.isTemporal], ?_⟩
       intro childValidity childValidityMem
       change childValidity ∈
@@ -196,9 +197,7 @@ private theorem directAlwaysChildValid (selected : AnnotatedOccurrence Atom)
       let parentValidity := ValidityOccurrence.prefixPath 0 (validity.through interval)
       refine ⟨parentValidity, ?_, ?_, ?_, ?_⟩
       · exact List.mem_map.mpr ⟨validity, validityMem, rfl⟩
-      · simp [parentValidity, AnnotatedOccurrence.child,
-          AnnotatedOccurrence.reference, AnnotatedOccurrence.formula,
-          ValidityOccurrence.prefixPath, ValidityOccurrence.through,
+      · simp [parentValidity, ValidityOccurrence.prefixPath, ValidityOccurrence.through,
           ValidityOccurrence.shift, List.append_assoc]
       · simp [parentValidity, ValidityOccurrence.prefixPath,
           ValidityOccurrence.through, ValidityOccurrence.shift,
@@ -220,7 +219,7 @@ private theorem directUntilChildValid (selected : AnnotatedOccurrence Atom)
   | mk id payload parent =>
       change payload = .unmarked (.strictUntil interval invariant target) at shape
       subst payload
-      refine ⟨by simp [AnnotatedOccurrence.reference, AnnotatedOccurrence.formula,
+      refine ⟨by simp [AnnotatedOccurrence.formula,
         Stlsat.Formula.isTemporal], ?_⟩
       intro childValidity childValidityMem
       change childValidity ∈ FormulaValidity.validityFrom time
@@ -239,9 +238,8 @@ private theorem directUntilChildValid (selected : AnnotatedOccurrence Atom)
       · simp only [parentValidity, FormulaValidity.validityOccurrences,
           dif_pos nontrivial, List.mem_append]
         exact Or.inl (List.mem_map.mpr ⟨validity, validityMem, rfl⟩)
-      · simp [parentValidity, AnnotatedOccurrence.child,
-          AnnotatedOccurrence.reference, AnnotatedOccurrence.formula,
-          ValidityOccurrence.prefixPath, ValidityOccurrence.beforeTarget,
+      · simp [parentValidity, ValidityOccurrence.prefixPath,
+          ValidityOccurrence.beforeTarget,
           ValidityOccurrence.shift, List.append_assoc]
       · simp [parentValidity, ValidityOccurrence.prefixPath,
           ValidityOccurrence.beforeTarget, ValidityOccurrence.shift,
@@ -263,7 +261,7 @@ private theorem directReleaseChildValid (selected : AnnotatedOccurrence Atom)
   | mk id payload parent =>
       change payload = .unmarked (.strictRelease interval target invariant) at shape
       subst payload
-      refine ⟨by simp [AnnotatedOccurrence.reference, AnnotatedOccurrence.formula,
+      refine ⟨by simp [AnnotatedOccurrence.formula,
         Stlsat.Formula.isTemporal], ?_⟩
       intro childValidity childValidityMem
       change childValidity ∈ FormulaValidity.validityFrom time
@@ -279,9 +277,7 @@ private theorem directReleaseChildValid (selected : AnnotatedOccurrence Atom)
       refine ⟨parentValidity, ?_, ?_, ?_, ?_⟩
       · simp only [parentValidity, FormulaValidity.validityOccurrences, List.mem_append]
         exact Or.inr (List.mem_map.mpr ⟨validity, validityMem, rfl⟩)
-      · simp [parentValidity, AnnotatedOccurrence.child,
-          AnnotatedOccurrence.reference, AnnotatedOccurrence.formula,
-          ValidityOccurrence.prefixPath, ValidityOccurrence.through,
+      · simp [parentValidity, ValidityOccurrence.prefixPath, ValidityOccurrence.through,
           ValidityOccurrence.shift, List.append_assoc]
       · simp [parentValidity, ValidityOccurrence.prefixPath,
           ValidityOccurrence.through, ValidityOccurrence.shift,
@@ -560,6 +556,7 @@ def MarkedActive (node : Node Atom) : Prop :=
     | .markedStrictRelease interval _ _ => interval.lower ≤ node.time
     | .unmarked _ => True
 
+omit [DecidableEq Atom] in
 theorem initial_markedActive (formula : Stlsat.Formula Atom) :
     (Node.initial formula).MarkedActive := by
   intro occurrence present
@@ -611,6 +608,7 @@ theorem jump_markedActive {node : Node Atom} (size : Nat) :
 def DerivationValid (node : Node Atom) : Prop :=
   node.ProvenanceValid ∧ node.MarkedActive
 
+omit [DecidableEq Atom] in
 theorem initial_derivationValid (formula : Stlsat.Formula Atom) :
     (Node.initial formula).DerivationValid :=
   ⟨Node.initial_provenanceValid formula, Node.initial_markedActive formula⟩

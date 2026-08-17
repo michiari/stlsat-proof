@@ -327,6 +327,7 @@ theorem invariant_normal (origin : node.SkippedOrigin size rank)
   exact postponedInvariant_normal origin.source
     ((normal_iff node).mp normal origin.source origin.sourceMem) origin.shape
 
+omit [DecidableEq Atom] in
 theorem invariant_rank_le (origin : node.SkippedOrigin size rank) :
     formulaRank origin.invariant < rank :=
   (postponedInvariant_rank_lt origin.source origin.shape).trans_le origin.bounded
@@ -418,8 +419,7 @@ theorem requirements_compatible (first second : node.SkippedOrigin size rank)
   change right ∈ second.semanticLeaves at rightMem
   rcases List.mem_map.mp leftMem with ⟨leftLeaf, leftLeafMem, rfl⟩
   rcases List.mem_map.mp rightMem with ⟨rightLeaf, rightLeafMem, rfl⟩
-  simp only [FormulaValidity.SemanticRequirement.root,
-    FormulaValidity.SemanticOccurrence.reroot, List.nil_append]
+  simp only [FormulaValidity.SemanticOccurrence.reroot]
   by_cases canonical : first.source.id ++ [first.edge] ++ leftLeaf.path =
       second.source.id ++ [second.edge] ++ rightLeaf.path
   · refine ⟨canonical, ?_⟩
@@ -448,7 +448,7 @@ theorem requirements_compatible (first second : node.SkippedOrigin size rank)
       (simp only [FormulaValidity.SemanticOccurrence.reroot,
         FormulaValidity.SemanticOccurrence.shift,
         FormulaValidity.SemanticOccurrence.toValidity,
-        Stlsat.Interval.shift] at * <;> omega)
+        Stlsat.Interval.shift] at *; omega)
 
 /-- The obligations already satisfied by the ranked signal are compatible
 with every new skipped invariant copy. -/
@@ -468,7 +468,7 @@ theorem ranked_compatible_requirement (origin : node.SkippedOrigin size rank)
   have otherMem : other ∈ node.label := Finset.mem_toList.mp otherListMem
   rcases List.mem_map.mp liveMem with ⟨liveLeaf, liveLeafMem, rfl⟩
   rcases List.mem_map.mp shiftedMem with ⟨shiftedLeaf, shiftedLeafMem, rfl⟩
-  simp only [FormulaValidity.SemanticOccurrence.reroot, List.nil_append]
+  simp only [FormulaValidity.SemanticOccurrence.reroot]
   by_cases otherTemporal : other.isTemporal = true
   · have formulaTemporal : other.formula.isTemporal = true :=
       (AnnotatedOccurrence.formula_isTemporal other).trans otherTemporal
@@ -503,7 +503,7 @@ theorem ranked_compatible_requirement (origin : node.SkippedOrigin size rank)
         (simp only [FormulaValidity.SemanticOccurrence.reroot,
           FormulaValidity.SemanticOccurrence.shift,
           FormulaValidity.SemanticOccurrence.toValidity,
-          Stlsat.Interval.shift] at * <;> omega)
+          Stlsat.Interval.shift] at *; omega)
   · have notTemporal : other.isTemporal = false := by
       exact Bool.eq_false_of_not_eq_true otherTemporal
     have atCurrent := node.semanticFrom_window_eq_time_of_nonTemporal poised normal
@@ -521,7 +521,7 @@ end SkippedOrigin
 structural rank. -/
 theorem exists_rankedHolds_of_previous {node : Node Atom} {size rank : Nat}
     {semantics : Stlsat.AtomicSemantics Atom}
-    (rankPositive : 0 < rank)
+    (_rankPositive : 0 < rank)
     (derivation : node.FullDerivationValid)
     (poised : node.Poised) (timely : node.Timely)
     (normal : node.InStrictNormalForm)
@@ -542,15 +542,15 @@ theorem exists_rankedHolds_of_previous {node : Node Atom} {size rank : Nat}
         (requirement first).Compatible (requirement second) := by
     intro first second
     cases first with
-    | inl unit =>
+    | inl _ =>
         cases second with
-        | inl unit => exact Or.inl rfl
+        | inl _ => exact Or.inl rfl
         | inr origin =>
             exact Or.inr (origin.ranked_compatible_requirement derivation timely poised
               normal previous computed sound)
     | inr firstOrigin =>
         cases second with
-        | inl unit =>
+        | inl _ =>
             exact Or.inr (firstOrigin.ranked_compatible_requirement derivation timely poised
               normal previous computed sound).symm
         | inr secondOrigin =>
@@ -622,6 +622,7 @@ theorem exists_rankedHolds_of_previous {node : Node Atom} {size rank : Nat}
             exact invariantAt 1 invariant rfl instant after before
           · exact later
 
+omit [DecidableEq Atom] in
 theorem rankedHolds_zero_of_base {node : Node Atom} {size : Nat}
     {semantics : Stlsat.AtomicSemantics Atom} {signal : Stlsat.Signal semantics}
     (base : node.BaseHolds size semantics signal) :
@@ -658,6 +659,7 @@ noncomputable def maxFormulaRank (node : Node Atom) : Nat := by
   exact node.label.toList.foldr (fun occurrence rank =>
     max (formulaRank occurrence.formula) rank) 0
 
+omit [DecidableEq Atom] in
 theorem formulaRank_le_maxFormulaRank (node : Node Atom)
     (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label) :
     formulaRank occurrence.formula ≤ node.maxFormulaRank := by

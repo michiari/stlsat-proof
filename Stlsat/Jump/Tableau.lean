@@ -269,7 +269,7 @@ end AnnotatedOccurrence
 /-- Parent-annotated labels remain finite conjunctive sets. -/
 abbrev Label (Atom : Type u) := Finset (AnnotatedOccurrence Atom)
 
-/-- A node of the tableau with the paper's proposed corrected JUMP rule. -/
+/-- A node of the tableau with the corrected JUMP rule. -/
 structure Node (Atom : Type u) where
   time : Nat
   label : Label Atom
@@ -433,11 +433,6 @@ end WindowOccurrence
 private def windowsOf {Atom : Type u} (root : OccurrenceId)
     (formula : Stlsat.Formula Atom) : List WindowOccurrence :=
   (FormulaValidity.validityOccurrences formula).map (WindowOccurrence.ofValidity root)
-
-private def windowsThrough {Atom : Type u} (root : OccurrenceId)
-    (bounds : Stlsat.Interval) (formula : Stlsat.Formula Atom) : List WindowOccurrence :=
-  (FormulaValidity.validityOccurrences formula).map fun occurrence =>
-    WindowOccurrence.ofValidity root (occurrence.through bounds)
 
 namespace Node
 
@@ -665,20 +660,6 @@ noncomputable def completeLimit? (node : Node Atom) : Option Nat :=
         some (conflict.window.lower - target.window.upper)
       else none)
 
-omit [DecidableEq Atom] in
-/-- If there are no potential conflict windows, the completeness limit is infinite. -/
-theorem completeLimit_eq_none_of_conflictWindows_eq_nil (node : Node Atom)
-    (empty : node.conflictWindows = []) : node.completeLimit? = none := by
-  unfold completeLimit?
-  rw [empty]
-  change minimum?
-    (List.flatMap (fun _ : WindowOccurrence => ([] : List Nat)) node.targetWindows) = none
-  have flattened :
-      List.flatMap (fun _ : WindowOccurrence => ([] : List Nat)) node.targetWindows = [] :=
-    List.flatMap_eq_nil_iff.mpr (fun _ _ => rfl)
-  rw [flattened]
-  rfl
-
 /--
 The final jump size. Unlike the two conflict limits, `k(u)` must be finite:
 when `K(u)` has no future member, this definition returns `none` rather than
@@ -719,74 +700,6 @@ private theorem minimum?_le_of_mem {values : List Nat} {minimum value : Nat}
           rcases present with rfl | tailPresent
           · exact Nat.min_le_left _ _
           · exact (Nat.min_le_right _ _).trans (ih tailMinimum tailPresent)
-
-private theorem minimum?_mem {values : List Nat} {minimum : Nat}
-    (computed : minimum? values = some minimum) : minimum ∈ values := by
-  induction values generalizing minimum with
-  | nil => simp [minimum?] at computed
-  | cons head tail ih =>
-      simp only [minimum?] at computed
-      cases tailMinimum : minimum? tail with
-      | none =>
-          simp only [tailMinimum, Option.some.injEq] at computed
-          subst minimum
-          simp
-      | some other =>
-          simp only [tailMinimum, Option.some.injEq] at computed
-          subst minimum
-          by_cases ordered : head ≤ other
-          · rw [Nat.min_eq_left ordered]
-            simp
-          · rw [Nat.min_eq_right (Nat.le_of_not_ge ordered)]
-            exact List.mem_cons_of_mem head (ih tailMinimum)
-
-private theorem minimum?_eq_some_of_mem_of_le {values : List Nat} {minimum : Nat}
-    (present : minimum ∈ values) (least : ∀ value ∈ values, minimum ≤ value) :
-    minimum? values = some minimum := by
-  cases computed : minimum? values with
-  | none =>
-      have empty := (minimum?_eq_none_iff values).mp computed
-      subst values
-      simp at present
-  | some actual =>
-      have actual_le : actual ≤ minimum :=
-        minimum?_le_of_mem computed present
-      have minimum_le : minimum ≤ actual :=
-        least actual (minimum?_mem computed)
-      have : actual = minimum := Nat.le_antisymm actual_le minimum_le
-      exact congrArg some this
-
-omit [DecidableEq Atom] in
-/--
-Compute a JUMP size without depending on the unspecified order of
-`Finset.toList`: `distance` is the distance to a least future live bound, and
-the two window-derived limits are infinite.
--/
-theorem jumpSize_eq_of_least_future_bound (node : Node Atom) {distance : Nat}
-    (positive : 0 < distance)
-    (candidate : node.time + distance ∈ node.boundCandidates)
-    (least : ∀ bound ∈ node.boundCandidates, node.time < bound →
-      node.time + distance ≤ bound)
-    (soundInfinite : node.soundLimit? = none)
-    (completeInfinite : node.completeLimit? = none) :
-    node.jumpSize? = some distance := by
-  let distances :=
-    (node.boundCandidates.filter (node.time < ·)).map (· - node.time)
-  have distancePresent : distance ∈ distances := by
-    apply List.mem_map.mpr
-    refine ⟨node.time + distance, ?_, by omega⟩
-    exact List.mem_filter.mpr ⟨candidate, by simpa using positive⟩
-  have distanceLeast : ∀ value ∈ distances, distance ≤ value := by
-    intro value valueMem
-    rcases List.mem_map.mp valueMem with ⟨bound, boundMem, rfl⟩
-    rcases List.mem_filter.mp boundMem with ⟨boundCandidate, future⟩
-    have future' : node.time < bound := by simpa using future
-    have bounded := least bound boundCandidate future'
-    omega
-  have boundsComputed : node.boundsLimit? = some distance := by
-    unfold boundsLimit?
-    exact minimum?_eq_some_of_mem_of_le distancePresent distanceLeast
-  simp [jumpSize?, boundsComputed, soundInfinite, completeInfinite, minLimit]
 
 private theorem minimum?_positive_of_all_positive {values : List Nat} {minimum : Nat}
     (computed : minimum? values = some minimum)
@@ -1019,35 +932,6 @@ theorem shiftedInvariant_disjoint (node : Node Atom) {size offset : Nat}
     omega
 
 omit [DecidableEq Atom] in
-/-- Every target window translated to a strictly skipped instant remains
-disjoint from every distinct conflict window. -/
-theorem shiftedTarget_disjoint (node : Node Atom) {size offset : Nat}
-    (computed : node.jumpSize? = some size) (complete : node.CompleteSafe)
-    (strictlySkipped : offset < size)
-    (target conflict : WindowOccurrence)
-    (targetMem : target ∈ node.targetWindows)
-    (conflictMem : conflict ∈ node.conflictWindows)
-    (distinct : target.id ≠ conflict.id) :
-    ¬WindowsOverlap (target.shift offset) conflict := by
-  have initiallyDisjoint := complete target targetMem conflict conflictMem distinct
-  have separated : target.window.upper < conflict.window.lower ∨
-      conflict.window.upper < target.window.lower := by
-    by_contra notSeparated
-    apply initiallyDisjoint
-    exact ⟨by omega, by omega⟩
-  rcases separated with targetBefore | conflictBefore
-  · have bounded := node.jumpSize_le_completeGap computed target conflict targetMem conflictMem
-      distinct targetBefore
-    intro overlap
-    rcases overlap with ⟨left, right⟩
-    simp only [WindowOccurrence.shift, Stlsat.Interval.shift] at left right
-    omega
-  · intro overlap
-    rcases overlap with ⟨left, right⟩
-    simp only [WindowOccurrence.shift, Stlsat.Interval.shift] at left right
-    omega
-
-omit [DecidableEq Atom] in
 /-- Both endpoints of every live temporal occurrence occur in `K(u)`. -/
 theorem interval_bounds_mem_boundCandidates (node : Node Atom)
     (occurrence : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
@@ -1181,14 +1065,6 @@ def HasAcceptingLeaf (semantics : Stlsat.AtomicSemantics Atom) [DecidableEq Atom
   | .binary _ satisfy postpone =>
       satisfy.HasAcceptingLeaf semantics ∨ postpone.HasAcceptingLeaf semantics
 
-/-- Every leaf of the JUMP tableau is rejected. -/
-def AllLeavesRejected (semantics : Stlsat.AtomicSemantics Atom) [DecidableEq Atom] :
-    TableauTree Atom → Prop
-  | .leaf node => node.Rejected semantics
-  | .unary _ child => child.AllLeavesRejected semantics
-  | .binary _ satisfy postpone =>
-      satisfy.AllLeavesRejected semantics ∧ postpone.AllLeavesRejected semantics
-
 end TableauTree
 
 /-- A fully developed tableau whose advancing rule may be STEP or JUMP. -/
@@ -1207,12 +1083,6 @@ def HasAcceptingBranch {Atom : Type u} [DecidableEq Atom]
     {semantics : Stlsat.AtomicSemantics Atom} {formula : Stlsat.Formula Atom}
     (tableau : Tableau semantics formula) : Prop :=
   tableau.tree.HasAcceptingLeaf semantics
-
-/-- Every branch of the JUMP tableau ends at a rejected node. -/
-def AllBranchesRejected {Atom : Type u} [DecidableEq Atom]
-    {semantics : Stlsat.AtomicSemantics Atom} {formula : Stlsat.Formula Atom}
-    (tableau : Tableau semantics formula) : Prop :=
-  tableau.tree.AllLeavesRejected semantics
 
 end Tableau
 

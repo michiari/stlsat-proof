@@ -3,7 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Jump.Splicing
+import Stlsat.Jump.Validity
 
 /-!
 # Local semantic transport across JUMP
@@ -29,92 +29,6 @@ def SkippedInvariantsHold (node : Node Atom) (size : Nat)
     occurrence.postponedInvariant? = some (edge, invariant) →
       ∀ instant, node.time < instant → instant < node.time + size →
         invariant.Satisfies semantics signal instant
-
-omit [DecidableEq Atom] in
-/-- A signal instant inspected by a skipped invariant instance lies in the
-corresponding `N(u)` window translated by the skipped offset. -/
-theorem skippedInvariant_support (node : Node Atom)
-    (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
-    (edge : Nat) (invariant : Stlsat.Formula Atom)
-    (shape : occurrence.postponedInvariant? = some (edge, invariant))
-    (validity : ValidityOccurrence)
-    (validityMem : validity ∈ FormulaValidity.validityOccurrences invariant)
-    (offset instant : Nat)
-    (lower : node.time + offset + validity.window.lower ≤ instant)
-    (upper : instant ≤ node.time + offset + validity.window.upper) :
-    let window :=
-      (WindowOccurrence.ofValidity (occurrence.id ++ [edge]) validity).shift node.time
-    window ∈ node.invariantWindows ∧
-      (window.shift offset).window.lower ≤ instant ∧
-      instant ≤ (window.shift offset).window.upper := by
-  dsimp only
-  refine ⟨node.invariantWindow_mem occurrence present edge invariant shape validity validityMem,
-    ?_, ?_⟩ <;>
-    simp only [WindowOccurrence.shift, WindowOccurrence.ofValidity,
-      Stlsat.Interval.shift] <;>
-    omega
-
-omit [DecidableEq Atom] in
-/-- A signal instant inspected by an independent temporal formula lies in its
-corresponding `O(u)` window. -/
-theorem independent_support (node : Node Atom)
-    (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
-    (temporal : occurrence.isTemporal = true)
-    (notParentActive : ¬node.ParentActive occurrence)
-    (validity : ValidityOccurrence)
-    (validityMem : validity ∈ FormulaValidity.validityOccurrences occurrence.formula)
-    (instant : Nat) (lower : validity.window.lower ≤ instant)
-    (upper : instant ≤ validity.window.upper) :
-    let window := WindowOccurrence.ofValidity occurrence.id validity
-    window ∈ node.independentWindows ∧ window.window.lower ≤ instant ∧
-      instant ≤ window.window.upper := by
-  dsimp only
-  exact ⟨node.independentWindow_mem occurrence present temporal notParentActive validity
-    validityMem, lower, upper⟩
-
-omit [DecidableEq Atom] in
-/-- The soundness guard rules out every common signal instant between a
-strictly skipped invariant instance and a distinct independent leaf. -/
-theorem skippedInvariant_disjoint_from_independent (node : Node Atom) {size offset : Nat}
-    (computed : node.jumpSize? = some size) (sound : node.SoundSafe)
-    (strictlySkipped : offset < size)
-    (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
-    (edge : Nat) (invariant : Stlsat.Formula Atom)
-    (sourceShape : source.postponedInvariant? = some (edge, invariant))
-    (invariantValidity : ValidityOccurrence)
-    (invariantMem : invariantValidity ∈ FormulaValidity.validityOccurrences invariant)
-    (other : AnnotatedOccurrence Atom) (otherMem : other ∈ node.label)
-    (otherTemporal : other.isTemporal = true)
-    (otherIndependent : ¬node.ParentActive other)
-    (otherValidity : ValidityOccurrence)
-    (otherValidityMem : otherValidity ∈
-      FormulaValidity.validityOccurrences other.formula)
-    (distinct : source.id ++ [edge] ++ invariantValidity.path ≠
-      other.id ++ otherValidity.path) :
-    ¬∃ instant,
-      node.time + offset + invariantValidity.window.lower ≤ instant ∧
-      instant ≤ node.time + offset + invariantValidity.window.upper ∧
-      otherValidity.window.lower ≤ instant ∧ instant ≤ otherValidity.window.upper := by
-  rintro ⟨instant, invariantLower, invariantUpper, otherLower, otherUpper⟩
-  let invariantWindow :=
-    (WindowOccurrence.ofValidity (source.id ++ [edge]) invariantValidity).shift node.time
-  let otherWindow := WindowOccurrence.ofValidity other.id otherValidity
-  have invariantWindowMem : invariantWindow ∈ node.invariantWindows := by
-    exact node.invariantWindow_mem source sourceMem edge invariant sourceShape
-      invariantValidity invariantMem
-  have otherWindowMem : otherWindow ∈ node.independentWindows := by
-    exact node.independentWindow_mem other otherMem otherTemporal otherIndependent
-      otherValidity otherValidityMem
-  have windowDistinct : invariantWindow.id ≠ otherWindow.id := by
-    simpa [invariantWindow, otherWindow, WindowOccurrence.shift,
-      WindowOccurrence.ofValidity, List.append_assoc] using distinct
-  have disjoint := node.shiftedInvariant_disjoint computed sound strictlySkipped
-    invariantWindow otherWindow invariantWindowMem otherWindowMem windowDistinct
-  apply disjoint
-  constructor <;>
-    simp only [invariantWindow, otherWindow, WindowOccurrence.shift,
-      WindowOccurrence.ofValidity, Stlsat.Interval.shift] <;>
-    omega
 
 /-- Backward model preservation for a computed JUMP, factored through the
 precise semantic obligation imposed at its skipped instants. -/

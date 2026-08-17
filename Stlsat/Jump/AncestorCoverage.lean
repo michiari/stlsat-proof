@@ -9,8 +9,8 @@ import Stlsat.Jump.Provenance
 # Coverage through parent-active provenance
 
 Validity windows of parent-active occurrences are lifted through stored parent
-references until a live independent temporal ancestor is reached.  This is the
-missing coverage case for the JUMP soundness guard.
+references until a live independent temporal ancestor is reached.  This
+supplies the parent-active coverage case for the JUMP soundness guard.
 -/
 
 namespace Stlsat.Jump
@@ -47,7 +47,7 @@ theorem postponedInvariant_active (node : Node Atom)
   | mk id payload parent =>
       cases payload <;>
         simp_all [AnnotatedOccurrence.postponedInvariant?,
-          AnnotatedOccurrence.interval?, Node.MarkedActive,
+          AnnotatedOccurrence.interval?,
           AnnotatedOccurrence.Timely, Stlsat.Occurrence.Timely]
 
 omit [DecidableEq Atom] in
@@ -141,6 +141,7 @@ theorem postponedInvariant_covered_by_source (node : Node Atom) {size offset : N
               ValidityOccurrence.through]
             omega
 
+omit [DecidableEq Atom] in
 /-- Every validity occurrence of a live temporal formula is covered by an
 `O(u)` window of its first live independent ancestor. -/
 theorem validity_covered_by_independent_ancestor (node : Node Atom)
@@ -181,7 +182,8 @@ theorem validity_covered_by_independent_ancestor (node : Node Atom)
                 parent.formula = parentFormula ∧ parent.parent = parentParent := by
               cases parent with
               | mk id payload parent =>
-                  simp only [AnnotatedOccurrence.reference, OccurrenceRef.mk.injEq] at parentReference
+                  simp only [AnnotatedOccurrence.reference, OccurrenceRef.mk.injEq]
+                    at parentReference
                   simpa using parentReference
             have parentTemporal : parent.isTemporal = true := by
               rw [← AnnotatedOccurrence.formula_isTemporal, parentData.2.1]
@@ -201,6 +203,7 @@ termination_by source.reference.depth
 decreasing_by
   simp [AnnotatedOccurrence.reference, parentEq, parentData, OccurrenceRef.depth]
 
+omit [DecidableEq Atom] in
 /-- Parent-active skipped invariant leaves have the same independent-ancestor
 coverage as independent sources. -/
 theorem postponedInvariant_covered_by_independent_ancestor (node : Node Atom)
@@ -241,6 +244,7 @@ private theorem isTemporal_of_postponedInvariant
         simp_all [AnnotatedOccurrence.postponedInvariant?,
           AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal]
 
+omit [DecidableEq Atom] in
 /-- The soundness guard compares every skipped invariant leaf against every
 other skipped invariant leaf, including the parent-active case, through the
 other leaf's first independent temporal ancestor. -/
@@ -298,6 +302,7 @@ theorem skippedInvariants_disjoint (node : Node Atom)
       Stlsat.Interval.shift]
     omega
 
+omit [DecidableEq Atom] in
 /-- A strictly skipped invariant instance is separated from every distinct
 leaf of every live temporal occurrence.  Parent-active occurrences are
 covered through their first independent ancestor. -/

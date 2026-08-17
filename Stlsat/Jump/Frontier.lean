@@ -3,7 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Jump.AncestorCoverage
+import Stlsat.Jump.Provenance
 
 /-!
 # Expansion frontiers at a JUMP node
@@ -71,7 +71,8 @@ inductive ExpansionFrontier {Atom : Type u} [DecidableEq Atom]
       ExpansionFrontier node id parent (.strictUntil interval invariant target)
   | strictUntilPostpone (id parent interval invariant target)
       (active : interval.lower ≤ node.time) (beforeEnd : node.time < interval.upper)
-      (marked : (AnnotatedOccurrence.mk id (.markedStrictUntil interval invariant target) parent) ∈ node.label)
+      (marked : AnnotatedOccurrence.mk id
+        (.markedStrictUntil interval invariant target) parent ∈ node.label)
       (invariantFrontier : ExpansionFrontier node (id ++ [0])
         (some (.mk id (.strictUntil interval invariant target) parent))
         (invariant.temporalExpansion node.time)) :
@@ -85,7 +86,8 @@ inductive ExpansionFrontier {Atom : Type u} [DecidableEq Atom]
       ExpansionFrontier node id parent (.strictRelease interval target invariant)
   | strictReleasePostpone (id parent interval target invariant)
       (active : interval.lower ≤ node.time) (beforeEnd : node.time < interval.upper)
-      (marked : (AnnotatedOccurrence.mk id (.markedStrictRelease interval target invariant) parent) ∈ node.label)
+      (marked : AnnotatedOccurrence.mk id
+        (.markedStrictRelease interval target invariant) parent ∈ node.label)
       (invariantFrontier : ExpansionFrontier node (id ++ [1])
         (some (.mk id (.strictRelease interval target invariant) parent))
         (invariant.temporalExpansion node.time)) :
@@ -115,11 +117,15 @@ theorem map {source target : Node Atom}
       AnnotatedOccurrence.mk id (.markedAlways interval body) parent ∈ source.label →
         AnnotatedOccurrence.mk id (.markedAlways interval body) parent ∈ target.label)
     (markedUntil : ∀ id parent interval invariant goal,
-      (AnnotatedOccurrence.mk id (.markedStrictUntil interval invariant goal) parent) ∈ source.label →
-        (AnnotatedOccurrence.mk id (.markedStrictUntil interval invariant goal) parent) ∈ target.label)
+      AnnotatedOccurrence.mk id (.markedStrictUntil interval invariant goal) parent ∈
+          source.label →
+        AnnotatedOccurrence.mk id (.markedStrictUntil interval invariant goal) parent ∈
+          target.label)
     (markedRelease : ∀ id parent interval goal invariant,
-      (AnnotatedOccurrence.mk id (.markedStrictRelease interval goal invariant) parent) ∈ source.label →
-        (AnnotatedOccurrence.mk id (.markedStrictRelease interval goal invariant) parent) ∈ target.label) :
+      AnnotatedOccurrence.mk id (.markedStrictRelease interval goal invariant) parent ∈
+          source.label →
+        AnnotatedOccurrence.mk id (.markedStrictRelease interval goal invariant) parent ∈
+          target.label) :
     ∀ {id parent formula}, ExpansionFrontier source id parent formula →
       ExpansionFrontier target id parent formula := by
   intro id parent formula frontier
@@ -491,7 +497,8 @@ theorem child_emissionsPlanned {node child : Node Atom}
       rcases childMem with rfl | rfl
       · apply Node.emissionsPlanned_replace planned
           (fun frontier => Expansion.child_expansionFrontier
-            (.strictUntilBeforeEnd selected interval invariant target shape present active beforeEnd)
+            (.strictUntilBeforeEnd selected interval invariant target shape present active
+              beforeEnd)
               (by simp) frontier)
         intro source sourceMem edge formula sourceShape
         simp only [List.mem_singleton] at sourceMem
@@ -500,7 +507,8 @@ theorem child_emissionsPlanned {node child : Node Atom}
           at sourceShape
       · apply Node.emissionsPlanned_replace planned
           (fun frontier => Expansion.child_expansionFrontier
-            (.strictUntilBeforeEnd selected interval invariant target shape present active beforeEnd)
+            (.strictUntilBeforeEnd selected interval invariant target shape present active
+              beforeEnd)
               (by simp) frontier)
         intro source sourceMem edge formula sourceShape
         simp only [List.mem_cons, List.not_mem_nil, or_false] at sourceMem
@@ -530,7 +538,8 @@ theorem child_emissionsPlanned {node child : Node Atom}
       rcases childMem with rfl | rfl
       · apply Node.emissionsPlanned_replace planned
           (fun frontier => Expansion.child_expansionFrontier
-            (.strictReleaseBeforeEnd selected interval target invariant shape present active beforeEnd)
+            (.strictReleaseBeforeEnd selected interval target invariant shape present active
+              beforeEnd)
               (by simp) frontier)
         intro source sourceMem edge formula sourceShape
         simp only [List.mem_cons, List.not_mem_nil, or_false] at sourceMem
@@ -539,7 +548,8 @@ theorem child_emissionsPlanned {node child : Node Atom}
             at sourceShape
       · apply Node.emissionsPlanned_replace planned
           (fun frontier => Expansion.child_expansionFrontier
-            (.strictReleaseBeforeEnd selected interval target invariant shape present active beforeEnd)
+            (.strictReleaseBeforeEnd selected interval target invariant shape present active
+              beforeEnd)
               (by simp) frontier)
         intro source sourceMem edge formula sourceShape
         simp only [List.mem_cons, List.not_mem_nil, or_false] at sourceMem
