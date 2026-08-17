@@ -81,9 +81,7 @@ namespace FormulaValidity
 variable {Atom : Type u}
 
 /--
-The proposition-validity-interval function `tinv`, extended so that `truth`
-contributes the same singleton window as an atom.  In particular,
-`tinv (¬⊤)` is now nonempty.
+The proposition-validity-interval function `tinv`.
 
 Paths retain the identity of repeated syntactic leaf occurrences even when
 their formulas and computed windows coincide. Unary `F` and `G` use their
@@ -107,13 +105,6 @@ def validityOccurrences : Stlsat.Formula Atom → List ValidityOccurrence
        else []) ++
         (validityOccurrences right).map
           (fun occurrence => ValidityOccurrence.prefixPath 1 (occurrence.through bounds))
-
-/-- `truth` contributes exactly the same base validity occurrence as an atom. -/
-@[simp]
-theorem validityOccurrences_truth_eq_atom (atom : Atom) :
-    validityOccurrences (Stlsat.Formula.truth : Stlsat.Formula Atom) =
-      validityOccurrences (.atom atom) :=
-  rfl
 
 end FormulaValidity
 
