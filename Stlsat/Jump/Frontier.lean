@@ -15,7 +15,7 @@ formula occurrences.  It is used for the invariant instance emitted by each
 marked temporal occurrence.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 /-- `ExpansionFrontier node id parent formula` says that expanding the virtual
@@ -626,13 +626,13 @@ theorem initial_soundnessDerivationValid (formula : Stlsat.Formula Atom) :
 
 end Node
 
-namespace Rule
+namespace Jump.Rule
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
 
 theorem child_emissionsPlanned {node child : Node Atom}
-    {children : List (Node Atom)} (rule : Rule semantics node children)
+    {children : List (Node Atom)} (rule : Jump.Rule semantics node children)
     (planned : node.EmissionsPlanned) (childMem : child ∈ children) :
     child.EmissionsPlanned := by
   cases rule with
@@ -647,12 +647,12 @@ theorem child_emissionsPlanned {node child : Node Atom}
       exact node.jump_emissionsPlanned size
 
 theorem child_soundnessDerivationValid {node child : Node Atom}
-    {children : List (Node Atom)} (rule : Rule semantics node children)
+    {children : List (Node Atom)} (rule : Jump.Rule semantics node children)
     (valid : node.SoundnessDerivationValid) (childMem : child ∈ children) :
     child.SoundnessDerivationValid :=
   ⟨rule.child_derivationValid valid.1 childMem,
     rule.child_emissionsPlanned valid.2 childMem⟩
 
-end Rule
+end Jump.Rule
 
-end Stlsat.Jump
+end Stlsat.Tableau

@@ -14,7 +14,7 @@ created it.  This file records that fact as a node invariant and proves that
 all tableau rules preserve it.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace AnnotatedOccurrence
@@ -615,13 +615,13 @@ theorem initial_derivationValid (formula : Stlsat.Formula Atom) :
 
 end Node
 
-namespace Rule
+namespace Jump.Rule
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
 
 theorem child_provenanceValid {node child : Node Atom} {children : List (Node Atom)}
-    (rule : Rule semantics node children) (valid : node.ProvenanceValid)
+    (rule : Jump.Rule semantics node children) (valid : node.ProvenanceValid)
     (childMem : child ∈ children) : child.ProvenanceValid := by
   cases rule with
   | expand notRejected expansion => exact expansion.child_provenanceValid valid childMem
@@ -636,7 +636,7 @@ theorem child_provenanceValid {node child : Node Atom} {children : List (Node At
 
 /-- Every tableau rule preserves validity provenance and marked activity. -/
 theorem child_derivationValid {node child : Node Atom} {children : List (Node Atom)}
-    (rule : Rule semantics node children) (valid : node.DerivationValid)
+    (rule : Jump.Rule semantics node children) (valid : node.DerivationValid)
     (childMem : child ∈ children) : child.DerivationValid := by
   refine ⟨rule.child_provenanceValid valid.1 childMem, ?_⟩
   cases rule with
@@ -737,5 +737,5 @@ theorem child_derivationValid {node child : Node Atom} {children : List (Node At
       subst child
       exact Node.jump_markedActive size
 
-end Rule
-end Stlsat.Jump
+end Jump.Rule
+end Stlsat.Tableau

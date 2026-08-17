@@ -3,7 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Basic.Completeness
+import Stlsat.Tableau.ModelGuided
 import Stlsat.Jump.RankedSplicing
 
 /-!
@@ -16,7 +16,7 @@ current extraction alternative while preserving the other live obligations.
 This file develops the semantic part of that argument.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 variable {Atom : Type u}
@@ -429,24 +429,6 @@ theorem demandingLeaf_covered_by_conflictWindows (node : Node Atom)
               [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal]
           | markedStrictRelease interval target invariant => simp_all
               [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal]
-
-/-- Replacing one annotated occurrence by obligations true on the same
-signal preserves satisfaction of the complete annotated label. -/
-theorem satisfiedBy_replace_of {node : Node Atom}
-    {selected : AnnotatedOccurrence Atom}
-    {replacement : List (AnnotatedOccurrence Atom)}
-    {semantics : Stlsat.AtomicSemantics Atom}
-    {signal : Stlsat.Signal semantics}
-    (parent : node.SatisfiedBy semantics signal)
-    (replacementHolds : ∀ occurrence ∈ replacement,
-      occurrence.SatisfiedBy semantics signal node.time) :
-    (node.replace selected replacement).SatisfiedBy semantics signal := by
-  rw [Node.satisfiedBy_iff] at parent ⊢
-  intro occurrence occurrenceMem
-  change occurrence ∈ node.label.erase selected ∪ replacement.toFinset at occurrenceMem
-  rcases Finset.mem_union.mp occurrenceMem with oldMem | freshMem
-  · exact parent occurrence (Finset.mem_of_mem_erase oldMem)
-  · exact replacementHolds occurrence (by simpa using freshMem)
 
 /-- An intermediate target has already been moved to the current extraction
 time while the complete live node remains satisfied.  This is the certificate
@@ -1207,4 +1189,4 @@ theorem hasModel_jump_or_targetEscape (node : Node Atom)
       poised normal complete model)
 
 end Node
-end Stlsat.Jump
+end Stlsat.Tableau

@@ -6,6 +6,8 @@ Authors: Michele Chiari
 import Stlsat.Jump.Completeness
 import Stlsat.Jump.Soundness
 import Stlsat.Jump.Termination
+import Stlsat.Basic.Completeness
+import Stlsat.Tableau.Construction
 
 /-!
 # Existence of the STL tableau with JUMP
@@ -20,76 +22,45 @@ of `CanJump`.  Thus the constructed tableau uses JUMP whenever it is
 applicable according to the formalized guards.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 
 universe u
 
-namespace Node
+namespace Jump
 
 variable {Atom : Type u} [DecidableEq Atom]
-
-/-- Every occurrence retained by `STEP` comes from a temporal occurrence in
-the source label. -/
-theorem containsTemporal_of_mem_stepLabel {node : Node Atom}
-    {occurrence : AnnotatedOccurrence Atom} (present : occurrence ∈ node.stepLabel) :
-    node.ContainsTemporal := by
-  rcases Finset.mem_union.mp present with unchanged | continued
-  · rcases Finset.mem_filter.mp unchanged with ⟨sourceMem, temporal⟩
-    refine ⟨occurrence, sourceMem, ?_⟩
-    cases occurrence with
-    | mk id payload parent =>
-        cases payload <;>
-          simp_all [AnnotatedOccurrence.isUnmarkedTemporal,
-            Stlsat.Occurrence.isUnmarkedTemporal,
-            AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
-            Stlsat.Formula.isTemporal]
-  · rcases Finset.mem_image.mp continued with ⟨source, sourceFiltered, rfl⟩
-    rcases Finset.mem_filter.mp sourceFiltered with ⟨sourceMem, continues⟩
-    refine ⟨source, sourceMem, ?_⟩
-    cases source with
-    | mk id payload parent =>
-        cases payload <;>
-          simp_all [AnnotatedOccurrence.markedContinuesAt,
-            Stlsat.Occurrence.markedContinuesAt,
-            AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal]
-
-theorem stepLabel_eq_empty_of_not_containsTemporal {node : Node Atom}
-    (absent : ¬node.ContainsTemporal) : node.stepLabel = ∅ := by
-  apply Finset.eq_empty_iff_forall_notMem.mpr
-  intro occurrence present
-  exact absent (containsTemporal_of_mem_stepLabel present)
 
 /-- A node is terminal, or one of the formal tableau rules is applicable.
 The JUMP case is selected precisely when `CanJump` holds. -/
 theorem terminal_or_rule (semantics : Stlsat.AtomicSemantics Atom)
     (node : Node Atom) :
-    node.Terminal semantics ∨ ∃ children, Rule semantics node children := by
+    node.Terminal semantics ∨ ∃ children, Jump.Rule semantics node children := by
   classical
   by_cases rejected : node.Rejected semantics
   · exact Or.inl (Or.inl rejected)
   by_cases expandable : ∃ children, Expansion node children
   · rcases expandable with ⟨children, expansion⟩
-    exact Or.inr ⟨children, Rule.expand rejected expansion⟩
+    exact Or.inr ⟨children, Jump.Rule.expand rejected expansion⟩
   have poised : node.Poised := expandable
   by_cases temporal : node.ContainsTemporal
   · by_cases canJump : node.CanJump
     · rcases canJump with ⟨sound, complete, size, computed⟩
       exact Or.inr ⟨[node.jump size],
-        Rule.jump rejected poised temporal sound complete size computed⟩
-    · exact Or.inr ⟨[node.step], Rule.step rejected poised temporal canJump⟩
+        Jump.Rule.jump rejected poised temporal sound complete size computed⟩
+    · exact Or.inr ⟨[node.step], Jump.Rule.step rejected poised temporal canJump⟩
   · exact Or.inl (Or.inr ⟨poised, rejected,
       node.stepLabel_eq_empty_of_not_containsTemporal temporal⟩)
 
-end Node
+end Jump
 
-namespace Rule
+namespace Jump.Rule
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
 
 /-- Every rule has exactly one or two children, matching `TableauTree`. -/
 theorem children_shape {node : Node Atom} {children : List (Node Atom)}
-    (rule : Rule semantics node children) :
+    (rule : Jump.Rule semantics node children) :
     (∃ child, children = [child]) ∨
       (∃ left right, children = [left, right]) := by
   cases rule with
@@ -108,9 +79,9 @@ theorem children_shape {node : Node Atom} {children : List (Node Atom)}
   | step => exact Or.inl ⟨_, rfl⟩
   | jump => exact Or.inl ⟨_, rfl⟩
 
-end Rule
+end Jump.Rule
 
-namespace TableauTree
+namespace Jump
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
@@ -120,35 +91,15 @@ frontier is completely developed. -/
 theorem exists_wellFormed_terminal_of_accessible {node : Node Atom}
     (accessible : Acc (JumpChild semantics) node) :
     ∃ tree : TableauTree Atom,
-      tree.root = node ∧ tree.WellFormed semantics ∧
-        tree.FrontierTerminal semantics := by
-  induction accessible with
-  | intro node predecessors ih =>
-      rcases node.terminal_or_rule semantics with terminal | ⟨children, rule⟩
-      · exact ⟨.leaf node, rfl, trivial, terminal⟩
-      · rcases rule.children_shape with ⟨child, rfl⟩ | ⟨left, right, rfl⟩
-        · have childOf : JumpChild semantics child node :=
-            ⟨[child], rule, by simp⟩
-          rcases ih child childOf with
-            ⟨childTree, childRoot, childWellFormed, childTerminal⟩
-          refine ⟨.unary node childTree, rfl, ?_, childTerminal⟩
-          exact ⟨by simpa [childRoot] using rule, childWellFormed⟩
-        · have leftOf : JumpChild semantics left node :=
-            ⟨[left, right], rule, by simp⟩
-          have rightOf : JumpChild semantics right node :=
-            ⟨[left, right], rule, by simp⟩
-          rcases ih left leftOf with
-            ⟨leftTree, leftRoot, leftWellFormed, leftTerminal⟩
-          rcases ih right rightOf with
-            ⟨rightTree, rightRoot, rightWellFormed, rightTerminal⟩
-          refine ⟨.binary node leftTree rightTree, rfl, ?_,
-            ⟨leftTerminal, rightTerminal⟩⟩
-          exact ⟨by simpa [leftRoot, rightRoot] using rule,
-            leftWellFormed, rightWellFormed⟩
+      tree.root = node ∧ Jump.TreeWellFormed semantics tree ∧
+        tree.FrontierTerminal semantics :=
+  TableauTree.exists_wellFormed_terminal_of_accessible_with
+    (Jump.Rule semantics) (Jump.terminal_or_rule semantics)
+    (fun rule => rule.children_shape) accessible
 
-end TableauTree
+end Jump
 
-namespace Tableau
+namespace Jump.Development
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom} {formula : Stlsat.Formula Atom}
@@ -156,8 +107,8 @@ variable {Atom : Type u} [DecidableEq Atom]
 /-- Every strict-normal-form STL formula has a finite, fully developed tableau
 which employs JUMP whenever the formal rule permits it. -/
 theorem exists_of_strictNormalForm (normal : formula.InStrictNormalForm) :
-    Nonempty (Tableau semantics formula) := by
-  rcases TableauTree.exists_wellFormed_terminal_of_accessible
+    Nonempty (Jump.Development semantics formula) := by
+  rcases Jump.exists_wellFormed_terminal_of_accessible
       (jumpChild_initial_accessible semantics formula) with
     ⟨tree, rooted, wellFormed, terminal⟩
   exact ⟨⟨tree, normal, rooted, wellFormed, terminal⟩⟩
@@ -166,24 +117,34 @@ theorem exists_of_strictNormalForm (normal : formula.InStrictNormalForm) :
 acceptance is equivalent to satisfiability. -/
 theorem exists_hasAcceptingBranch_iff_satisfiable
     (normal : formula.InStrictNormalForm) :
-    ∃ tableau : Tableau semantics formula,
+    ∃ tableau : Jump.Development semantics formula,
       tableau.HasAcceptingBranch ↔ formula.Satisfiable semantics := by
   rcases exists_of_strictNormalForm normal with ⟨tableau⟩
-  exact ⟨tableau, tableau.soundness, tableau.completeness⟩
+  exact ⟨tableau, Jump.Development.soundness tableau,
+    Jump.Development.completeness tableau⟩
+
+/-- Any fully developed basic and JUMP tableaux for the same input agree on
+acceptance.  This is the formal correspondence stated in the paper, obtained
+through their shared semantic specification. -/
+theorem hasAcceptingBranch_iff_basic
+    (tableau : Jump.Development semantics formula)
+    (basic : Stlsat.BasicTableau semantics formula) :
+    tableau.HasAcceptingBranch ↔ basic.HasAcceptingBranch := by
+  constructor
+  · intro jumpAccepts
+    exact basic.completeness (Jump.Development.soundness tableau jumpAccepts)
+  · intro basicAccepts
+    exact Jump.Development.completeness tableau (basic.soundness basicAccepts)
 
 /-- For every fully developed basic tableau, there is a fully developed JUMP
 tableau which accepts exactly when the basic tableau accepts. -/
 theorem exists_hasAcceptingBranch_iff_basic
     (basic : Stlsat.BasicTableau semantics formula) :
-    ∃ tableau : Tableau semantics formula,
+    ∃ tableau : Jump.Development semantics formula,
       tableau.HasAcceptingBranch ↔ basic.HasAcceptingBranch := by
   rcases exists_of_strictNormalForm basic.root_normal with ⟨tableau⟩
-  refine ⟨tableau, ?_, ?_⟩
-  · intro jumpAccepts
-    exact basic.completeness (tableau.soundness jumpAccepts)
-  · intro basicAccepts
-    exact tableau.completeness (basic.soundness basicAccepts)
+  exact ⟨tableau, tableau.hasAcceptingBranch_iff_basic basic⟩
 
-end Tableau
+end Jump.Development
 
-end Stlsat.Jump
+end Stlsat.Tableau

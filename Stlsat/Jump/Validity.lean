@@ -13,7 +13,7 @@ formula is evaluated.  This module relates the relative windows of a formula
 to the absolute windows of its temporal expansion.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace FormulaValidity
@@ -156,4 +156,4 @@ theorem validityFrom_temporalExpansion (formula : Stlsat.Formula Atom) (time : N
         omega
 
 end FormulaValidity
-end Stlsat.Jump
+end Stlsat.Tableau

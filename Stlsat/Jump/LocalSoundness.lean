@@ -14,7 +14,7 @@ model of the successor reconstructs a model of the source as soon as every
 invariant instance at a strictly skipped instant is realized by that model.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace Node
@@ -227,4 +227,4 @@ theorem hasModel_of_jump_of_skippedInvariants {node : Node Atom} {size : Nat}
     (Classical.choice childModel) skipped
 
 end Node
-end Stlsat.Jump
+end Stlsat.Tableau

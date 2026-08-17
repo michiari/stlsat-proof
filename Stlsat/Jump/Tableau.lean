@@ -3,18 +3,18 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Basic.Tableau
+import Stlsat.Tableau.Core
 
 /-!
-# The JUMP tableau
+# The JUMP rule extension
 
-This file formalizes the `JUMP` rule proposed in the paper, with `truth`
-treated as a validity leaf in order to expose atom-free obligations to the
-JUMP guards.  The definitions are deliberately parallel to
-`Stlsat.Basic.Tableau`: adding
-parent metadata to the basic occurrence type or another constructor to
-`BasicRule` would invalidate exhaustive matches throughout the already proved
-basic-tableau development.
+This file extends the shared `Stlsat.Tableau` node, expansion, and tree core
+with the validity windows, guards, successor, and rule relation required by
+the `JUMP` optimization.  Ordinary expansion remains exactly the same shared
+relation used by the basic configuration.
+
+`truth` is treated as a validity leaf in order to expose atom-free obligations
+to the JUMP guards.
 
 The paper describes `JUMP` after replacing `F` and `G` by strict until and
 strict release. The existing Lean syntax retains these unary operators, so the
@@ -26,12 +26,9 @@ occurrences. Since `JUMP` is specified to simulate repeated postponement and
 temporal occurrence; otherwise later parent-activity tests would be corrupted.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 
 universe u
-
-/-- A stable address for a syntactic formula occurrence. -/
-abbrev OccurrenceId := List Nat
 
 /-- A path from a formula root to one particular atom-or-truth leaf. -/
 abbrev FormulaPath := List Nat
@@ -119,296 +116,6 @@ theorem validityOccurrences_truth_eq_atom (atom : Atom) :
   rfl
 
 end FormulaValidity
-
-/--
-A stable reference to a formula occurrence, including its complete provenance.
-
-The recursive parent component distinguishes simultaneously live shifted
-instances of the same nested syntax, which an identifier-only pointer would
-conflate.
--/
-inductive OccurrenceRef (Atom : Type u) where
-  | mk (id : OccurrenceId) (formula : Stlsat.Formula Atom)
-      (parent : Option (OccurrenceRef Atom))
-
-namespace OccurrenceRef
-
-variable {Atom : Type u}
-
-private def decEq [DecidableEq Atom] :
-    (left right : OccurrenceRef Atom) → Decidable (left = right)
-  | .mk leftId leftFormula none, .mk rightId rightFormula none =>
-      if idEq : leftId = rightId then
-        if formulaEq : leftFormula = rightFormula then
-          isTrue (by subst rightId; subst rightFormula; rfl)
-        else
-          isFalse (by intro equal; cases equal; exact formulaEq rfl)
-      else
-        isFalse (by intro equal; cases equal; exact idEq rfl)
-  | .mk _ _ none, .mk _ _ (some _) =>
-      isFalse (by intro equal; cases equal)
-  | .mk _ _ (some _), .mk _ _ none =>
-      isFalse (by intro equal; cases equal)
-  | .mk leftId leftFormula (some leftParent),
-      .mk rightId rightFormula (some rightParent) =>
-      if idEq : leftId = rightId then
-        if formulaEq : leftFormula = rightFormula then
-          match decEq leftParent rightParent with
-          | isTrue parentEq =>
-              isTrue (by subst rightId; subst rightFormula; subst rightParent; rfl)
-          | isFalse parentNe =>
-              isFalse (by intro equal; cases equal; exact parentNe rfl)
-        else
-          isFalse (by intro equal; cases equal; exact formulaEq rfl)
-      else
-        isFalse (by intro equal; cases equal; exact idEq rfl)
-termination_by left => left
-
-instance [DecidableEq Atom] : DecidableEq (OccurrenceRef Atom) := decEq
-
-end OccurrenceRef
-
-/--
-An occurrence used by the JUMP tableau.
-
-Its identifier denotes its stable syntactic origin. `parent` points to the
-temporal occurrence that generated it, when such a parent is recorded by the
-paper's expansion table.
--/
-structure AnnotatedOccurrence (Atom : Type u) where
-  id : OccurrenceId
-  payload : Stlsat.Occurrence Atom
-  parent : Option (OccurrenceRef Atom)
-deriving DecidableEq
-
-namespace AnnotatedOccurrence
-
-variable {Atom : Type u}
-
-/-- Change the marked/unmarked payload while retaining identity and parent. -/
-def relabel (occurrence : AnnotatedOccurrence Atom) (payload : Stlsat.Occurrence Atom)
-    (parent := occurrence.parent) : AnnotatedOccurrence Atom where
-  id := occurrence.id
-  payload := payload
-  parent := parent
-
-/-- Create the occurrence at one child edge of the selected syntax node. -/
-def child (occurrence : AnnotatedOccurrence Atom) (edge : Nat)
-    (payload : Stlsat.Occurrence Atom) (parent : Option (OccurrenceRef Atom)) :
-    AnnotatedOccurrence Atom where
-  id := occurrence.id ++ [edge]
-  payload := payload
-  parent := parent
-
-/-- Unmark an occurrence without discarding its provenance. -/
-def unmark (occurrence : AnnotatedOccurrence Atom) : AnnotatedOccurrence Atom :=
-  occurrence.relabel occurrence.payload.unmark
-
-/-- Extract the formula represented by a marked or unmarked payload. -/
-def formula (occurrence : AnnotatedOccurrence Atom) : Stlsat.Formula Atom :=
-  match occurrence.payload with
-  | .unmarked formula => formula
-  | .markedEventually interval body => .eventually interval body
-  | .markedAlways interval body => .always interval body
-  | .markedStrictUntil interval invariant target =>
-      .strictUntil interval invariant target
-  | .markedStrictRelease interval target invariant =>
-      .strictRelease interval target invariant
-
-/-- The recursive reference denoted by this live occurrence. -/
-def reference (occurrence : AnnotatedOccurrence Atom) : OccurrenceRef Atom :=
-  .mk occurrence.id occurrence.formula occurrence.parent
-
-def isTemporal (occurrence : AnnotatedOccurrence Atom) : Bool := occurrence.payload.isTemporal
-
-def isUnmarkedTemporal (occurrence : AnnotatedOccurrence Atom) : Bool :=
-  occurrence.payload.isUnmarkedTemporal
-
-def markedContinuesAt (time : Nat) (occurrence : AnnotatedOccurrence Atom) : Bool :=
-  occurrence.payload.markedContinuesAt time
-
-/-- The outer temporal interval, if this occurrence has one. -/
-def interval? (occurrence : AnnotatedOccurrence Atom) : Option Stlsat.Interval :=
-  match occurrence.payload with
-  | .unmarked (.eventually interval _)
-  | .unmarked (.always interval _)
-  | .unmarked (.strictUntil interval _ _)
-  | .unmarked (.strictRelease interval _ _)
-  | .markedEventually interval _
-  | .markedAlways interval _
-  | .markedStrictUntil interval _ _
-  | .markedStrictRelease interval _ _ => some interval
-  | _ => none
-
-/--
-The edge and invariant repeatedly emitted while a marked obligation is
-postponed. Native `eventually` has no explicit invariant entry here.
--/
-def postponedInvariant? (occurrence : AnnotatedOccurrence Atom) :
-    Option (Nat × Stlsat.Formula Atom) :=
-  match occurrence.payload with
-  | .markedAlways _ body => some (0, body)
-  | .markedStrictUntil _ invariant _ => some (0, invariant)
-  | .markedStrictRelease _ _ invariant => some (1, invariant)
-  | _ => none
-
-/--
-The edge and target that could discharge a marked obligation at an
-intermediate time. Native `always` has no explicit releasing-target entry here.
--/
-def postponedTarget? (occurrence : AnnotatedOccurrence Atom) :
-    Option (Nat × Stlsat.Formula Atom) :=
-  match occurrence.payload with
-  | .markedEventually _ body => some (0, body)
-  | .markedStrictUntil _ _ target => some (1, target)
-  | .markedStrictRelease _ target _ => some (0, target)
-  | _ => none
-
-end AnnotatedOccurrence
-
-/-- Parent-annotated labels remain finite conjunctive sets. -/
-abbrev Label (Atom : Type u) := Finset (AnnotatedOccurrence Atom)
-
-/-- A node of the tableau with the corrected JUMP rule. -/
-structure Node (Atom : Type u) where
-  time : Nat
-  label : Label Atom
-deriving DecidableEq
-
-namespace Node
-
-variable {Atom : Type u} [DecidableEq Atom]
-
-/-- The root occurrence has the empty syntactic address and no parent. -/
-def initial (formula : Stlsat.Formula Atom) : Node Atom where
-  time := 0
-  label := {{ id := [], payload := .unmarked formula, parent := none }}
-
-/-- Forget JUMP-only metadata, obtaining a basic-tableau node. -/
-def erase (node : Node Atom) : Stlsat.Node Atom where
-  time := node.time
-  label := node.label.image AnnotatedOccurrence.payload
-
-def replace (node : Node Atom) (selected : AnnotatedOccurrence Atom)
-    (replacement : List (AnnotatedOccurrence Atom)) : Node Atom where
-  time := node.time
-  label := (node.label.erase selected) ∪ replacement.toFinset
-
-/-- The paper's parent-active predicate. -/
-def ParentActive (node : Node Atom) (occurrence : AnnotatedOccurrence Atom) : Prop :=
-  occurrence ∈ node.label ∧
-    match occurrence.parent with
-    | none => False
-    | some parentRef => ∃ parent ∈ node.label, parent.reference = parentRef
-
-/-- Parent-aware version of the basic `STEP` label. -/
-def stepLabel (node : Node Atom) : Label Atom :=
-  (node.label.filter fun occurrence => occurrence.isUnmarkedTemporal = true) ∪
-    ((node.label.filter fun occurrence => occurrence.markedContinuesAt node.time = true).image
-      AnnotatedOccurrence.unmark)
-
-def step (node : Node Atom) : Node Atom where
-  time := node.time + 1
-  label := node.stepLabel
-
-def ContainsTemporal (node : Node Atom) : Prop :=
-  ∃ occurrence ∈ node.label, occurrence.isTemporal = true
-
-/-- Reuse the basic false/local-consistency rejection checks after erasure. -/
-def Rejected (semantics : Stlsat.AtomicSemantics Atom) (node : Node Atom) : Prop :=
-  node.erase.Rejected semantics
-
-end Node
-
-/-- Parent-aware versions of all basic expansion rules. -/
-inductive Expansion {Atom : Type u} [DecidableEq Atom] (node : Node Atom) :
-    List (Node Atom) → Prop where
-  | disjunction (selected : AnnotatedOccurrence Atom) (left right : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.or left right)) (present : selected ∈ node.label) :
-      Expansion node
-        [node.replace selected [selected.child 0 (.unmarked left) selected.parent],
-         node.replace selected [selected.child 1 (.unmarked right) selected.parent]]
-  | conjunction (selected : AnnotatedOccurrence Atom) (left right : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.and left right)) (present : selected ∈ node.label) :
-      Expansion node
-        [node.replace selected
-          [selected.child 0 (.unmarked left) selected.parent,
-           selected.child 1 (.unmarked right) selected.parent]]
-  | eventuallyBeforeEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (body : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.eventually interval body))
-      (present : selected ∈ node.label) (active : interval.lower ≤ node.time)
-      (beforeEnd : node.time < interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 0 (.unmarked (body.temporalExpansion node.time)) none],
-         node.replace selected
-          [selected.relabel (.markedEventually interval body)]]
-  | eventuallyAtEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (body : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.eventually interval body))
-      (present : selected ∈ node.label) (atEnd : node.time = interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 0 (.unmarked (body.temporalExpansion node.time)) none]]
-  | alwaysBeforeEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (body : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.always interval body))
-      (present : selected ∈ node.label) (active : interval.lower ≤ node.time)
-      (beforeEnd : node.time < interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.relabel (.markedAlways interval body),
-           selected.child 0 (.unmarked (body.temporalExpansion node.time))
-             (some selected.reference)]]
-  | alwaysAtEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (body : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.always interval body))
-      (present : selected ∈ node.label) (atEnd : node.time = interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 0 (.unmarked (body.temporalExpansion node.time))
-            (some selected.reference)]]
-  | strictUntilBeforeEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (invariant target : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.strictUntil interval invariant target))
-      (present : selected ∈ node.label) (active : interval.lower ≤ node.time)
-      (beforeEnd : node.time < interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 1 (.unmarked (target.temporalExpansion node.time)) none],
-         node.replace selected
-          [selected.relabel (.markedStrictUntil interval invariant target),
-           selected.child 0 (.unmarked (invariant.temporalExpansion node.time))
-             (some selected.reference)]]
-  | strictUntilAtEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (invariant target : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.strictUntil interval invariant target))
-      (present : selected ∈ node.label) (atEnd : node.time = interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 1 (.unmarked (target.temporalExpansion node.time)) none]]
-  | strictReleaseBeforeEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (target invariant : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.strictRelease interval target invariant))
-      (present : selected ∈ node.label) (active : interval.lower ≤ node.time)
-      (beforeEnd : node.time < interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 0 (.unmarked (target.temporalExpansion node.time)) none,
-           selected.child 1 (.unmarked (invariant.temporalExpansion node.time)) none],
-         node.replace selected
-          [selected.relabel (.markedStrictRelease interval target invariant),
-           selected.child 1 (.unmarked (invariant.temporalExpansion node.time))
-             (some selected.reference)]]
-  | strictReleaseAtEnd (selected : AnnotatedOccurrence Atom) (interval : Stlsat.Interval)
-      (target invariant : Stlsat.Formula Atom)
-      (shape : selected.payload = .unmarked (.strictRelease interval target invariant))
-      (present : selected ∈ node.label) (atEnd : node.time = interval.upper) :
-      Expansion node
-        [node.replace selected
-          [selected.child 1 (.unmarked (invariant.temporalExpansion node.time))
-            (some selected.reference)]]
 
 /-- A validity window indexed by its canonical, root-relative leaf identity. -/
 structure WindowOccurrence where
@@ -1001,21 +708,10 @@ def jump (node : Node Atom) (size : Nat) : Node Atom where
 
 end Node
 
-namespace Node
+namespace Jump
 
-variable {Atom : Type u} [DecidableEq Atom]
-
-def Poised (node : Node Atom) : Prop := ¬∃ children, Expansion node children
-
-def Accepting (semantics : Stlsat.AtomicSemantics Atom) (node : Node Atom) : Prop :=
-  node.Poised ∧ ¬node.Rejected semantics ∧ node.stepLabel = ∅
-
-def Terminal (semantics : Stlsat.AtomicSemantics Atom) (node : Node Atom) : Prop :=
-  node.Rejected semantics ∨ node.Accepting semantics
-
-end Node
-
-/-- The basic expansion/STEP rules plus the proposed, mutually exclusive JUMP rule. -/
+/-- The shared expansion relation plus mutually exclusive `STEP` and `JUMP`
+advancement rules. -/
 inductive Rule {Atom : Type u} [DecidableEq Atom]
     (semantics : Stlsat.AtomicSemantics Atom) (node : Node Atom) : List (Node Atom) → Prop where
   | expand {children : List (Node Atom)} (notRejected : ¬node.Rejected semantics)
@@ -1029,61 +725,16 @@ inductive Rule {Atom : Type u} [DecidableEq Atom]
       (computed : node.jumpSize? = some size) :
       Rule semantics node [node.jump size]
 
-/-- The same finite unary/binary tree shape used by the basic tableau. -/
-inductive TableauTree (Atom : Type u) where
-  | leaf (node : Node Atom)
-  | unary (node : Node Atom) (child : TableauTree Atom)
-  | binary (node : Node Atom) (satisfy postpone : TableauTree Atom)
+/-- Well-formedness of a shared raw tree under the JUMP rule configuration. -/
+def TreeWellFormed {Atom : Type u} (semantics : Stlsat.AtomicSemantics Atom)
+    [DecidableEq Atom] : TableauTree Atom → Prop :=
+  TableauTree.WellFormedWith (Rule semantics)
 
-namespace TableauTree
+/-- The JUMP configuration of the shared developed-tableau structure. -/
+abbrev Development {Atom : Type u} [DecidableEq Atom]
+    (semantics : Stlsat.AtomicSemantics Atom) (formula : Stlsat.Formula Atom) :=
+  Stlsat.Tableau.Development semantics formula (Rule semantics)
 
-variable {Atom : Type u}
+end Jump
 
-def root : TableauTree Atom → Node Atom
-  | .leaf node | .unary node _ | .binary node _ _ => node
-
-def WellFormed (semantics : Stlsat.AtomicSemantics Atom) [DecidableEq Atom] :
-    TableauTree Atom → Prop
-  | .leaf _ => True
-  | .unary node child =>
-      Rule semantics node [child.root] ∧ child.WellFormed semantics
-  | .binary node satisfy postpone =>
-      Rule semantics node [satisfy.root, postpone.root] ∧
-        satisfy.WellFormed semantics ∧ postpone.WellFormed semantics
-
-def FrontierTerminal (semantics : Stlsat.AtomicSemantics Atom) [DecidableEq Atom] :
-    TableauTree Atom → Prop
-  | .leaf node => node.Terminal semantics
-  | .unary _ child => child.FrontierTerminal semantics
-  | .binary _ satisfy postpone =>
-      satisfy.FrontierTerminal semantics ∧ postpone.FrontierTerminal semantics
-
-def HasAcceptingLeaf (semantics : Stlsat.AtomicSemantics Atom) [DecidableEq Atom] :
-    TableauTree Atom → Prop
-  | .leaf node => node.Accepting semantics
-  | .unary _ child => child.HasAcceptingLeaf semantics
-  | .binary _ satisfy postpone =>
-      satisfy.HasAcceptingLeaf semantics ∨ postpone.HasAcceptingLeaf semantics
-
-end TableauTree
-
-/-- A fully developed tableau whose advancing rule may be STEP or JUMP. -/
-structure Tableau {Atom : Type u} [DecidableEq Atom]
-    (semantics : Stlsat.AtomicSemantics Atom) (formula : Stlsat.Formula Atom) where
-  tree : TableauTree Atom
-  root_normal : formula.InStrictNormalForm
-  rooted_at : tree.root = Node.initial formula
-  wellFormed : tree.WellFormed semantics
-  frontier_terminal : tree.FrontierTerminal semantics
-
-namespace Tableau
-
-/-- The JUMP tableau has a root-to-leaf branch ending at an accepting node. -/
-def HasAcceptingBranch {Atom : Type u} [DecidableEq Atom]
-    {semantics : Stlsat.AtomicSemantics Atom} {formula : Stlsat.Formula Atom}
-    (tableau : Tableau semantics formula) : Prop :=
-  tableau.tree.HasAcceptingLeaf semantics
-
-end Tableau
-
-end Stlsat.Jump
+end Stlsat.Tableau

@@ -4,6 +4,7 @@ Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
 import Stlsat.Jump.RankedSplicing
+import Stlsat.Tableau.Soundness
 
 /-!
 # Soundness of the JUMP tableau
@@ -14,7 +15,7 @@ splice a signal satisfying every invariant instance skipped by a JUMP.  The
 local result is then propagated backwards along an accepting branch.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace Node
@@ -115,7 +116,7 @@ theorem hasModel_of_guardedJump
 
 end Node
 
-namespace Rule
+namespace Jump.Rule
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
@@ -125,7 +126,7 @@ JUMP case, derivation validity supplies the provenance needed by the window
 argument. -/
 theorem hasModel_parent_of_child
     {node child : Node Atom} {children : List (Node Atom)}
-    (rule : Rule semantics node children) (derivation : node.FullDerivationValid)
+    (rule : Jump.Rule semantics node children) (derivation : node.FullDerivationValid)
     (timely : node.Timely) (normal : node.InStrictNormalForm)
     (childMem : child ∈ children) (childModel : child.HasModel semantics) :
     node.HasModel semantics := by
@@ -143,58 +144,45 @@ theorem hasModel_parent_of_child
       exact Node.hasModel_of_guardedJump semantics derivation notRejected poised sound computed
         timely normal childModel
 
-end Rule
+end Jump.Rule
 
 namespace TableauTree
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
 
-/-- Backward model construction on an accepted branch.  A simultaneous
-forward induction carries derivation validity to every JUMP node. -/
+/-- Backward model construction on an accepted branch.  This instantiates the
+shared soundness induction with timeliness, normality, and provenance-validity
+as the JUMP configuration's invariant. -/
 theorem root_hasModel_of_acceptingLeaf
-    (tree : TableauTree Atom) (wellFormed : tree.WellFormed semantics)
+    (tree : TableauTree Atom) (wellFormed : Jump.TreeWellFormed semantics tree)
     (accepting : tree.HasAcceptingLeaf semantics)
     (timely : tree.root.Timely) (normal : tree.root.InStrictNormalForm)
     (derivation : tree.root.FullDerivationValid) : tree.root.HasModel semantics := by
-  induction tree with
-  | leaf node => exact Node.hasModel_of_accepting accepting timely normal
-  | unary node child ih =>
-      rcases wellFormed with ⟨rule, childWellFormed⟩
-      have childMem : child.root ∈ [child.root] := by simp
-      have childTimely := rule.child_timely timely childMem
-      have childNormal := rule.child_normal normal childMem
-      have childDerivation := rule.child_fullDerivationValid derivation childMem
-      have childModel := ih childWellFormed accepting childTimely childNormal childDerivation
-      exact rule.hasModel_parent_of_child derivation timely normal childMem childModel
-  | binary node satisfy postpone ihSatisfy ihPostpone =>
-      rcases wellFormed with ⟨rule, satisfyWellFormed, postponeWellFormed⟩
-      rcases accepting with satisfyAccepting | postponeAccepting
-      · have childMem : satisfy.root ∈ [satisfy.root, postpone.root] := by simp
-        have childTimely := rule.child_timely timely childMem
-        have childNormal := rule.child_normal normal childMem
-        have childDerivation := rule.child_fullDerivationValid derivation childMem
-        have childModel := ihSatisfy satisfyWellFormed satisfyAccepting childTimely childNormal
-          childDerivation
-        exact rule.hasModel_parent_of_child derivation timely normal childMem childModel
-      · have childMem : postpone.root ∈ [satisfy.root, postpone.root] := by simp
-        have childTimely := rule.child_timely timely childMem
-        have childNormal := rule.child_normal normal childMem
-        have childDerivation := rule.child_fullDerivationValid derivation childMem
-        have childModel := ihPostpone postponeWellFormed postponeAccepting childTimely childNormal
-          childDerivation
-        exact rule.hasModel_parent_of_child derivation timely normal childMem childModel
+  apply root_hasModel_of_acceptingLeaf_with
+    (Jump.Rule semantics)
+    (fun node => node.Timely ∧ node.InStrictNormalForm ∧ node.FullDerivationValid)
+    tree wellFormed accepting ⟨timely, normal, derivation⟩
+  · intro node accepting invariant
+    exact Node.hasModel_of_accepting accepting invariant.1 invariant.2.1
+  · intro node child children rule invariant childMem
+    exact ⟨rule.child_timely invariant.1 childMem,
+      rule.child_normal invariant.2.1 childMem,
+      rule.child_fullDerivationValid invariant.2.2 childMem⟩
+  · intro node child children rule invariant childMem childModel
+    exact rule.hasModel_parent_of_child invariant.2.2 invariant.1 invariant.2.1
+      childMem childModel
 
 end TableauTree
 
-namespace Tableau
+namespace Jump.Development
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom} {formula : Stlsat.Formula Atom}
 
 /-- Soundness of the guarded JUMP tableau: every accepting branch yields a
 semantic model of the input formula. -/
-theorem soundness (tableau : Tableau semantics formula)
+theorem soundness (tableau : Jump.Development semantics formula)
     (accepted : tableau.HasAcceptingBranch) : formula.Satisfiable semantics := by
   have rootTimely : tableau.tree.root.Timely := by
     rw [tableau.rooted_at]
@@ -212,5 +200,5 @@ theorem soundness (tableau : Tableau semantics formula)
   rw [tableau.rooted_at, Node.erase_initial] at rootModel
   exact rootModel
 
-end Tableau
-end Stlsat.Jump
+end Jump.Development
+end Stlsat.Tableau

@@ -13,7 +13,7 @@ that rule derivations never assign two different signed leaves to the same
 identifier.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 namespace FormulaValidity
 
@@ -664,13 +664,13 @@ theorem initial_fullDerivationValid (formula : Stlsat.Formula Atom) :
 
 end Node
 
-namespace Rule
+namespace Jump.Rule
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
 
 theorem child_canonicalLeavesValid {node child : Node Atom}
-    {children : List (Node Atom)} (rule : Rule semantics node children)
+    {children : List (Node Atom)} (rule : Jump.Rule semantics node children)
     (valid : node.CanonicalLeavesValid) (childMem : child ∈ children) :
     child.CanonicalLeavesValid := by
   cases rule with
@@ -685,12 +685,12 @@ theorem child_canonicalLeavesValid {node child : Node Atom}
       exact Node.jump_canonicalLeavesValid size valid
 
 theorem child_fullDerivationValid {node child : Node Atom}
-    {children : List (Node Atom)} (rule : Rule semantics node children)
+    {children : List (Node Atom)} (rule : Jump.Rule semantics node children)
     (valid : node.FullDerivationValid) (childMem : child ∈ children) :
     child.FullDerivationValid :=
   ⟨rule.child_soundnessDerivationValid valid.1 childMem,
     rule.child_canonicalLeavesValid valid.2 childMem⟩
 
-end Rule
+end Jump.Rule
 
-end Stlsat.Jump
+end Stlsat.Tableau

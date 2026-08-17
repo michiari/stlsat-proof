@@ -3,7 +3,7 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Basic.Tableau
+import Stlsat.Tableau.Syntax
 
 /-!
 # Semantics of signal temporal logic

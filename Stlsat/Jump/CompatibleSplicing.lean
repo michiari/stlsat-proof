@@ -14,7 +14,7 @@ ask for the same signed literal.  This file proves the corresponding semantic
 amalgamation lemma for strict-normal formulas.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace FormulaValidity
@@ -776,4 +776,4 @@ theorem exists_signal_accepting_semanticRequirement_family
     exact chosenDemand.2.2.2
 
 end FormulaValidity
-end Stlsat.Jump
+end Stlsat.Tableau

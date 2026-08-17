@@ -13,7 +13,7 @@ references until a live independent temporal ancestor is reached.  This
 supplies the parent-active coverage case for the JUMP soundness guard.
 -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace OccurrenceRef
@@ -354,4 +354,4 @@ theorem skippedInvariant_disjoint_from_liveTemporal (node : Node Atom)
     omega
 
 end Node
-end Stlsat.Jump
+end Stlsat.Tableau

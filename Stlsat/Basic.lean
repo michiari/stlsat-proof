@@ -7,11 +7,12 @@ import Stlsat.Basic.Tableau
 import Stlsat.Basic.Termination
 import Stlsat.Basic.Soundness
 import Stlsat.Basic.Completeness
+import Stlsat.Tableau.Basic.Construction
 
 /-!
 # The basic STL tableau
 
-This is the umbrella module for the basic tableau without the `JUMP` rule. It
-exports the tableau definition together with its termination, soundness, and
-completeness proofs.
+This is the compatibility umbrella for the basic configuration of the shared
+tableau core. It exports construction, termination, soundness, and completeness
+for ordinary expansion and `STEP`, without JUMP-specific guards.
 -/

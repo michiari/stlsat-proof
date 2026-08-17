@@ -8,7 +8,7 @@ import Stlsat.Jump.AncestorCoverage
 
 /-! # Rank-stratified splicing across a JUMP -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 namespace Node
@@ -698,4 +698,4 @@ theorem exists_fullRankedHolds_with_skipped {node : Node Atom} {size : Nat}
     computed sound (by simpa using holds)
 
 end Node
-end Stlsat.Jump
+end Stlsat.Tableau

@@ -7,7 +7,7 @@ import Stlsat.Jump.Canonical
 
 /-! # Rank-stratified construction of skipped invariant models -/
 
-namespace Stlsat.Jump
+namespace Stlsat.Tableau
 universe u
 
 variable {Atom : Type u}
@@ -320,4 +320,4 @@ theorem satisfiedBy_of_ranked {node : Node Atom} {id parent formula size rank}
           simpa using show formulaRank invariant ≤ rank by omega))
 
 end ExpansionFrontier
-end Stlsat.Jump
+end Stlsat.Tableau
