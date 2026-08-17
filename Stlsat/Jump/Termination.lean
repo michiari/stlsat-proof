@@ -36,18 +36,21 @@ theorem jump_horizonBounded {bound size : Nat} {node : Node Atom}
   rw [AnnotatedOccurrence.horizon_unmark]
   exact bounded source (Finset.mem_filter.mp sourceMem).1
 end Node
-/-- The shared child relation instantiated with JUMP rules. -/
-abbrev JumpChild {Atom : Type u} [DecidableEq Atom]
-    (semantics : Stlsat.AtomicSemantics Atom) :=
-  Child (Jump.Rule semantics)
 
-namespace JumpChild
+namespace Jump
+
+/-- The shared child relation instantiated with JUMP rules. -/
+abbrev Child {Atom : Type u} [DecidableEq Atom]
+    (semantics : Stlsat.AtomicSemantics Atom) :=
+  Stlsat.Tableau.Child (Rule semantics)
+
+namespace Child
 
 variable {Atom : Type u} [DecidableEq Atom]
   {semantics : Stlsat.AtomicSemantics Atom}
 
 theorem horizonBounded {bound : Nat} {parent child : Node Atom}
-    (childOf : JumpChild semantics child parent)
+    (childOf : Child semantics child parent)
     (parentBounded : parent.HorizonBounded bound) :
     child.HorizonBounded bound := by
   rcases childOf with ⟨children, rule, childMem⟩
@@ -64,13 +67,13 @@ theorem horizonBounded {bound : Nat} {parent child : Node Atom}
       exact Node.jump_horizonBounded parentBounded
 
 theorem timely {parent child : Node Atom}
-    (childOf : JumpChild semantics child parent) (parentTimely : parent.Timely) :
+    (childOf : Child semantics child parent) (parentTimely : parent.Timely) :
     child.Timely := by
   rcases childOf with ⟨children, rule, childMem⟩
   exact rule.child_timely parentTimely childMem
 
 theorem terminationMeasure_decreases {bound : Nat} {parent child : Node Atom}
-    (childOf : JumpChild semantics child parent)
+    (childOf : Child semantics child parent)
     (parentBounded : parent.HorizonBounded bound)
     (parentTimely : parent.Timely) :
     Prod.Lex (fun left right : Nat ↦ left < right)
@@ -100,7 +103,7 @@ theorem terminationMeasure_decreases {bound : Nat} {parent child : Node Atom}
       simp only [Node.jump]
       omega
 
-end JumpChild
+end Child
 
 private theorem terminationMeasure_wellFounded {Atom : Type u} (bound : Nat) :
     WellFounded
@@ -112,10 +115,10 @@ private theorem terminationMeasure_wellFounded {Atom : Type u} (bound : Nat) :
 
 /-- Every horizon-bounded, timely annotated node is accessible for child
 steps of the tableau with JUMP. -/
-theorem jumpChild_accessible_of_invariants {Atom : Type u} [DecidableEq Atom]
+theorem child_accessible_of_invariants {Atom : Type u} [DecidableEq Atom]
     {semantics : Stlsat.AtomicSemantics Atom} {bound : Nat} {node : Node Atom}
     (bounded : node.HorizonBounded bound) (timely : node.Timely) :
-    Acc (JumpChild semantics) node := by
+    Acc (Child semantics) node := by
   let relation :=
     InvImage
       (Prod.Lex (fun left right : Nat ↦ left < right)
@@ -124,33 +127,35 @@ theorem jumpChild_accessible_of_invariants {Atom : Type u} [DecidableEq Atom]
   have relationWf : WellFounded relation := terminationMeasure_wellFounded bound
   refine relationWf.induction node (C := fun current ↦
     current.HorizonBounded bound → current.Timely →
-      Acc (JumpChild semantics) current) ?_ bounded timely
+      Acc (Child semantics) current) ?_ bounded timely
   intro parent ih parentBounded parentTimely
   apply Acc.intro parent
   intro child childOf
   exact ih child
-    (JumpChild.terminationMeasure_decreases childOf parentBounded parentTimely)
-    (JumpChild.horizonBounded childOf parentBounded)
-    (JumpChild.timely childOf parentTimely)
+    (Child.terminationMeasure_decreases childOf parentBounded parentTimely)
+    (Child.horizonBounded childOf parentBounded)
+    (Child.timely childOf parentTimely)
 
 /-- The initial annotated node is accessible for all tableau rules, including
 JUMP. -/
-theorem jumpChild_initial_accessible {Atom : Type u} [DecidableEq Atom]
+theorem child_initial_accessible {Atom : Type u} [DecidableEq Atom]
     (semantics : Stlsat.AtomicSemantics Atom) (formula : Stlsat.Formula Atom) :
-    Acc (JumpChild semantics) (Node.initial formula) :=
-  jumpChild_accessible_of_invariants
+    Acc (Child semantics) (Node.initial formula) :=
+  child_accessible_of_invariants
     (Node.initial_horizonBounded formula) (Node.initial_timely formula)
 
 /-- No infinite branch of JUMP-tableau rules starts at the initial node. -/
-theorem no_infinite_jump_tableau_branch {Atom : Type u} [DecidableEq Atom]
+theorem no_infinite_branch {Atom : Type u} [DecidableEq Atom]
     (semantics : Stlsat.AtomicSemantics Atom) (formula : Stlsat.Formula Atom) :
     ¬∃ branch : Nat → Node Atom,
       branch 0 = Node.initial formula ∧
-        ∀ index, JumpChild semantics (branch (index + 1)) (branch index) := by
+        ∀ index, Child semantics (branch (index + 1)) (branch index) := by
   intro infiniteBranch
   have noChain := acc_iff_isEmpty_descending_chain.mp
-    (jumpChild_initial_accessible semantics formula)
+    (child_initial_accessible semantics formula)
   rcases infiniteBranch with ⟨branch, startsAt, followsRules⟩
   exact noChain.false ⟨branch, startsAt, followsRules⟩
+
+end Jump
 
 end Stlsat.Tableau

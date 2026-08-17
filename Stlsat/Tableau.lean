@@ -3,8 +3,9 @@ Copyright (c) 2026 Michele Chiari. All rights reserved.
 Released under the MIT license as described in the file LICENSE.
 Authors: Michele Chiari
 -/
-import Stlsat.Basic
-import Stlsat.Jump
+import Stlsat.Tableau.Basic.Completeness
+import Stlsat.Tableau.Basic.Construction
+import Stlsat.Jump.Construction
 
 /-!
 # STL tableaux
@@ -19,9 +20,11 @@ inductions in `Stlsat.Tableau`.  The configured advancement relations are:
 * `Stlsat.Tableau.Jump.Rule`: the same expansion relation with mutually
   exclusive `STEP`/guarded-`JUMP` advancement.
 
-The paper-facing soundness and completeness results are
-`Stlsat.BasicTableau.soundness`, `Stlsat.BasicTableau.completeness`,
-`Stlsat.Jump.Tableau.soundness`, and `Stlsat.Jump.Tableau.completeness`.
+The soundness and completeness results are
+`Stlsat.Tableau.Basic.Development.soundness`,
+`Stlsat.Tableau.Basic.Development.completeness`,
+`Stlsat.Tableau.Jump.Development.soundness`, and
+`Stlsat.Tableau.Jump.Development.completeness`.
 Finite developments are supplied by
 `Stlsat.Tableau.Basic.Development.exists_of_strictNormalForm` and
 `Stlsat.Tableau.Jump.Development.exists_of_strictNormalForm`.

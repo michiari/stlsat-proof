@@ -6,7 +6,7 @@ Authors: Michele Chiari
 import Stlsat.Jump.Completeness
 import Stlsat.Jump.Soundness
 import Stlsat.Jump.Termination
-import Stlsat.Basic.Completeness
+import Stlsat.Tableau.Basic.Completeness
 import Stlsat.Tableau.Construction
 
 /-!
@@ -89,7 +89,7 @@ variable {Atom : Type u} [DecidableEq Atom]
 /-- Accessibility for the full rule relation constructs a finite tree whose
 frontier is completely developed. -/
 theorem exists_wellFormed_terminal_of_accessible {node : Node Atom}
-    (accessible : Acc (JumpChild semantics) node) :
+    (accessible : Acc (Jump.Child semantics) node) :
     ∃ tree : TableauTree Atom,
       tree.root = node ∧ Jump.TreeWellFormed semantics tree ∧
         tree.FrontierTerminal semantics :=
@@ -109,7 +109,7 @@ which employs JUMP whenever the formal rule permits it. -/
 theorem exists_of_strictNormalForm (normal : formula.InStrictNormalForm) :
     Nonempty (Jump.Development semantics formula) := by
   rcases Jump.exists_wellFormed_terminal_of_accessible
-      (jumpChild_initial_accessible semantics formula) with
+      (Jump.child_initial_accessible semantics formula) with
     ⟨tree, rooted, wellFormed, terminal⟩
   exact ⟨⟨tree, normal, rooted, wellFormed, terminal⟩⟩
 
@@ -128,7 +128,7 @@ acceptance.  This is the formal correspondence stated in the paper, obtained
 through their shared semantic specification. -/
 theorem hasAcceptingBranch_iff_basic
     (tableau : Jump.Development semantics formula)
-    (basic : Stlsat.BasicTableau semantics formula) :
+    (basic : Basic.Development semantics formula) :
     tableau.HasAcceptingBranch ↔ basic.HasAcceptingBranch := by
   constructor
   · intro jumpAccepts
@@ -139,7 +139,7 @@ theorem hasAcceptingBranch_iff_basic
 /-- For every fully developed basic tableau, there is a fully developed JUMP
 tableau which accepts exactly when the basic tableau accepts. -/
 theorem exists_hasAcceptingBranch_iff_basic
-    (basic : Stlsat.BasicTableau semantics formula) :
+    (basic : Basic.Development semantics formula) :
     ∃ tableau : Jump.Development semantics formula,
       tableau.HasAcceptingBranch ↔ basic.HasAcceptingBranch := by
   rcases exists_of_strictNormalForm basic.root_normal with ⟨tableau⟩
