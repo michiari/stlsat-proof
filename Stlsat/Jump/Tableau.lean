@@ -350,23 +350,21 @@ noncomputable def soundLimit? (node : Node Atom) : Option Nat :=
         some (other.window.lower - invariant.window.upper)
       else none)
 
-/-- The paper's completeness limit; `none` denotes `+∞`. -/
-noncomputable def completeLimit? (node : Node Atom) : Option Nat :=
-  minimum? (node.targetWindows.flatMap fun target =>
-    node.conflictWindows.filterMap fun conflict =>
-      if target.id ≠ conflict.id ∧ target.window.upper < conflict.window.lower then
-        some (conflict.window.lower - target.window.upper)
-      else none)
-
 /--
-The final jump size. Unlike the two conflict limits, `k(u)` must be finite:
+The final jump size is the minimum of the bounds and soundness limits.
+Unlike the soundness limit, `k(u)` must be finite:
 when `K(u)` has no future member, this definition returns `none` rather than
-manufacturing a destination from a soundness or completeness gap alone.
+manufacturing a destination from a soundness gap alone.
+
+There is no numerical completeness limit. Completeness uses the `M(u)`/`S(u)`
+no-overlap guard in `CompleteSafe` to move a skipped target extraction back to
+the current expansion phase, so its proof does not constrain the jump length
+beyond the ordinary temporal bounds in `K(u)`.
 -/
 noncomputable def jumpSize? (node : Node Atom) : Option Nat :=
   match node.boundsLimit? with
   | none => none
-  | some bounds => minLimit (some bounds) (minLimit node.soundLimit? node.completeLimit?)
+  | some bounds => minLimit (some bounds) node.soundLimit?
 
 private theorem minimum?_eq_none_iff (values : List Nat) :
     minimum? values = none ↔ values = [] := by
@@ -493,25 +491,17 @@ theorem jumpSize_pos (node : Node Atom) {size : Nat}
     rcases List.mem_filterMap.mp present with ⟨other, _, selected⟩
     split at selected <;> simp_all
     omega
-  have completePositive : ∀ value, node.completeLimit? = some value → 0 < value := by
-    intro value valueComputed
-    apply minimum?_positive_of_all_positive (by simpa [completeLimit?] using valueComputed)
-    intro distance present
-    rcases List.mem_flatMap.mp present with ⟨target, _, present⟩
-    rcases List.mem_filterMap.mp present with ⟨conflict, _, selected⟩
-    split at selected <;> simp_all
-    omega
   unfold jumpSize? at computed
   cases boundsComputed : node.boundsLimit? with
   | none => simp [boundsComputed] at computed
   | some bounds =>
       apply minLimit_positive
-        (left := some bounds) (right := minLimit node.soundLimit? node.completeLimit?)
+        (left := some bounds) (right := node.soundLimit?)
         (fun value equal => by
           simp only [Option.some.injEq] at equal
           subst value
           exact boundsPositive bounds boundsComputed)
-        (fun value equal => minLimit_positive soundPositive completePositive equal)
+        soundPositive
         (by simpa [boundsComputed] using computed)
 
 omit [DecidableEq Atom] in
@@ -523,22 +513,8 @@ theorem jumpSize_le_soundLimit (node : Node Atom) {size limit : Nat}
   cases boundsComputed : node.boundsLimit? with
   | none => simp [boundsComputed] at computed
   | some bounds =>
-      cases completeComputed : node.completeLimit? <;>
-        simp [boundsComputed, soundComputed, completeComputed, minLimit] at computed <;>
-        omega
-
-omit [DecidableEq Atom] in
-/-- The final jump size is bounded by every finite completeness limit. -/
-theorem jumpSize_le_completeLimit (node : Node Atom) {size limit : Nat}
-    (computed : node.jumpSize? = some size)
-    (completeComputed : node.completeLimit? = some limit) : size ≤ limit := by
-  unfold jumpSize? at computed
-  cases boundsComputed : node.boundsLimit? with
-  | none => simp [boundsComputed] at computed
-  | some bounds =>
-      cases soundComputed : node.soundLimit? <;>
-        simp [boundsComputed, soundComputed, completeComputed, minLimit] at computed <;>
-        omega
+      simp [boundsComputed, soundComputed, minLimit] at computed
+      omega
 
 omit [DecidableEq Atom] in
 /-- A particular ordered `N`/`O` gap bounds the computed jump. -/
@@ -569,36 +545,6 @@ theorem jumpSize_le_soundGap (node : Node Atom) {size : Nat}
   | some limit =>
       exact (node.jumpSize_le_soundLimit computed soundComputed).trans
         (minimum?_le_of_mem (by simpa [soundLimit?] using soundComputed) gapMem)
-
-omit [DecidableEq Atom] in
-/-- A particular ordered `M`/`S` gap bounds the computed jump. -/
-theorem jumpSize_le_completeGap (node : Node Atom) {size : Nat}
-    (computed : node.jumpSize? = some size)
-    (target conflict : WindowOccurrence)
-    (targetMem : target ∈ node.targetWindows)
-    (conflictMem : conflict ∈ node.conflictWindows)
-    (distinct : target.id ≠ conflict.id)
-    (ordered : target.window.upper < conflict.window.lower) :
-    size ≤ conflict.window.lower - target.window.upper := by
-  let gap := conflict.window.lower - target.window.upper
-  have gapMem : gap ∈ node.targetWindows.flatMap fun target =>
-      node.conflictWindows.filterMap fun conflict =>
-        if target.id ≠ conflict.id ∧ target.window.upper < conflict.window.lower then
-          some (conflict.window.lower - target.window.upper)
-        else none := by
-    apply List.mem_flatMap.mpr
-    refine ⟨target, targetMem, ?_⟩
-    apply List.mem_filterMap.mpr
-    exact ⟨conflict, conflictMem, by simp [gap, distinct, ordered]⟩
-  cases completeComputed : node.completeLimit? with
-  | none =>
-      have empty := (minimum?_eq_none_iff _).mp (by
-        simpa [completeLimit?] using completeComputed)
-      rw [empty] at gapMem
-      simp at gapMem
-  | some limit =>
-      exact (node.jumpSize_le_completeLimit computed completeComputed).trans
-        (minimum?_le_of_mem (by simpa [completeLimit?] using completeComputed) gapMem)
 
 omit [DecidableEq Atom] in
 /-- Every invariant window translated to a strictly skipped instant remains
