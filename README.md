@@ -3,24 +3,27 @@
 This repository contains a Lean 4 formalization of the tree-shaped tableau in
 the paper
 
-> **stlsat—An Improved Tableau for Satisfiability Checking of Signal Temporal
+> [1] **STLSat—An Improved Tableau for Satisfiability Checking of Signal Temporal
 > Logic Formulas**
+
+accepted for publication at [LPAR 2026](https://easychair.org/smart-program/LPAR-26/).
+A pre-print is available at [arXiv:2607.21081](https://doi.org/10.48550/arXiv.2607.21081).
 
 The development covers bounded, discrete-time Signal Temporal Logic (STL), the
 ordinary **basic tableau**, and the corrected **JUMP** optimization. It proves
-construction, termination, soundness, and completeness without `sorry`, new
-axioms, or unsafe proof mechanisms.
+construction, termination, soundness, and completeness of the tableau.
+
+The basic tableau has been introduced in
+
+> [2] Beatrice Melani, Ezio Bartocci, and Michele Chiari. 2025. A Tree-Shaped Tableau for Checking the Satisfiability
+> of Signal Temporal Logic with Bounded Temporal Operators. ACM Trans. Embedd. Comput. Syst. 24, 5s,
+> Article 147 (2025), https://doi.org/10.1145/3759917
 
 An additional variable-aware JUMP configuration ignores overlapping validity
 windows when their signed atoms have disjoint variable supports.  Its
 correctness is explicit about the semantic locality/amalgamation property
 which this optimization needs.
 
-The corrected paper source is [`human/stlsat/main.tex`](human/stlsat/main.tex).
-Its tableau section begins at
-[`\section{Tree-Shaped Tableau}`](human/stlsat/main.tex#L344), and the detailed
-proofs are in the
-[`Theorem Proofs` appendix](human/stlsat/main.tex#L1173).
 
 ## Main results
 
@@ -30,12 +33,12 @@ expansions, trees, acceptance condition, and semantic interpretation.
 
 | Result | Lean declaration | Paper correspondence |
 |---|---|---|
-| Basic soundness | [`Stlsat.Tableau.Basic.Development.soundness`](Stlsat/Tableau/Basic/Soundness.lean#L86) | Accepting-branch-to-satisfiability implication of the Basic Tableau theorem at [`main.tex:486–489`](human/stlsat/main.tex#L486) |
-| Basic completeness | [`Stlsat.Tableau.Basic.Development.completeness`](Stlsat/Tableau/Basic/Completeness.lean#L64) | Satisfiability-to-accepting-branch implication of the same Basic Tableau theorem |
-| JUMP soundness | [`Stlsat.Tableau.Jump.Development.soundness`](Stlsat/Jump/Soundness.lean#L185) | Theorem `thm:jump-sound` at [`main.tex:769–772`](human/stlsat/main.tex#L769), followed by Basic soundness |
-| JUMP completeness | [`Stlsat.Tableau.Jump.Development.completeness`](Stlsat/Jump/Completeness.lean#L541) | Theorem `thm:jump-complete` at [`main.tex:774–777`](human/stlsat/main.tex#L774), combined with Basic completeness |
-| Basic/JUMP correspondence | [`Stlsat.Tableau.Jump.Development.hasAcceptingBranch_iff_basic`](Stlsat/Jump/Construction.lean#L129) | The two paper theorems `thm:jump-sound` and `thm:jump-complete` as one equivalence |
-| Variable-aware JUMP soundness | [`Stlsat.Tableau.VariableJump.Development.soundness`](Stlsat/Jump/Variable/Soundness.lean) | Soundness of the support-sensitive relaxation, under `AtomicSupport` |
+| Basic soundness | [`Stlsat.Tableau.Basic.Development.soundness`](Stlsat/Tableau/Basic/Soundness.lean#L86) | Part of [2, Theorem 4.4] |
+| Basic completeness | [`Stlsat.Tableau.Basic.Development.completeness`](Stlsat/Tableau/Basic/Completeness.lean#L64) | [2, Lemma 3] |
+| JUMP soundness | [`Stlsat.Tableau.Jump.Development.soundness`](Stlsat/Jump/Soundness.lean#L185) | [1, Theorem 2] |
+| JUMP completeness | [`Stlsat.Tableau.Jump.Development.completeness`](Stlsat/Jump/Completeness.lean#L541) | [1, Theorem 3] |
+| Basic/JUMP correspondence | [`Stlsat.Tableau.Jump.Development.hasAcceptingBranch_iff_basic`](Stlsat/Jump/Construction.lean#L129) | Consequence of [1, Theorems 2 and 3] |
+| Variable-aware JUMP soundness | [`Stlsat.Tableau.VariableJump.Development.soundness`](Stlsat/Jump/Variable/Soundness.lean) | Soundness of the optimization at the end of [1, Section 4.3.2] |
 | Variable-aware JUMP completeness | [`Stlsat.Tableau.VariableJump.Development.completeness`](Stlsat/Jump/Variable/Completeness.lean) | Completeness of the same optimized configuration |
 
 The paper phrases JUMP soundness and completeness as implications between
@@ -75,18 +78,15 @@ The formalization follows the corrected version of
 | Paper material | Lean formalization |
 |---|---|
 | Background syntax and discrete-time semantics, Section `sec:background` | [`Stlsat/Tableau/Syntax.lean`](Stlsat/Tableau/Syntax.lean), [`Stlsat/Semantics.lean`](Stlsat/Semantics.lean) |
-| Strict normal form, around [`main.tex:340–342`](human/stlsat/main.tex#L340) | `Formula.InStrictNormalForm` in [`Syntax.lean`](Stlsat/Tableau/Syntax.lean) |
-| Node labels, parent occurrences, expansion rules, STEP, and acceptance, [`main.tex:353–489`](human/stlsat/main.tex#L353) | [`Stlsat/Tableau/Core.lean`](Stlsat/Tableau/Core.lean) |
+| Strict normal form | `Formula.InStrictNormalForm` in [`Syntax.lean`](Stlsat/Tableau/Syntax.lean) |
+| Node labels, parent occurrences, expansion rules, STEP, and acceptance | [`Stlsat/Tableau/Core.lean`](Stlsat/Tableau/Core.lean) |
 | Basic rule configuration | [`Stlsat/Tableau/Basic.lean`](Stlsat/Tableau/Basic.lean) |
-| Proposition-validity intervals `tinv` and Lemma `lemma:te-limit`, [`main.tex:594–605`](human/stlsat/main.tex#L594) | [`Stlsat/Jump/Tableau.lean`](Stlsat/Jump/Tableau.lean), [`Stlsat/Jump/Validity.lean`](Stlsat/Jump/Validity.lean), [`Stlsat/Jump/Provenance.lean`](Stlsat/Jump/Provenance.lean) |
-| Corrected sets `K(u)`, `N(u)`, `O(u)`, `M(u)`, and `S(u)`, the soundness limit, and the completeness no-overlap guard, [`main.tex:615–731`](human/stlsat/main.tex#L615) | Window, limit, and guard definitions in [`Stlsat/Jump/Tableau.lean`](Stlsat/Jump/Tableau.lean#L148); the paper's numerical completeness limit is unnecessary for the formal completeness proof and is not part of `Node.jumpSize?` |
-| Corrected JUMP rule, beginning near [`main.tex:736`](human/stlsat/main.tex#L736) | `Node.jump`, `Node.CanJump`, and `Stlsat.Tableau.Jump.Rule` in [`Stlsat/Jump/Tableau.lean`](Stlsat/Jump/Tableau.lean#L689) |
-| Soundness proof, [`main.tex:1243–1308`](human/stlsat/main.tex#L1243) | [`Stlsat/Jump/Soundness.lean`](Stlsat/Jump/Soundness.lean) and the soundness-support modules listed below |
-| Completeness proof, [`main.tex:1311–1372`](human/stlsat/main.tex#L1311) | [`Stlsat/Jump/Completeness.lean`](Stlsat/Jump/Completeness.lean) and [`CompletenessSplicing.lean`](Stlsat/Jump/CompletenessSplicing.lean) |
+| Proposition-validity intervals and Lemma 1 | [`Stlsat/Jump/Tableau.lean`](Stlsat/Jump/Tableau.lean), [`Stlsat/Jump/Validity.lean`](Stlsat/Jump/Validity.lean), [`Stlsat/Jump/Provenance.lean`](Stlsat/Jump/Provenance.lean) |
+| Corrected sets `K(u)`, `N(u)`, `O(u)`, `M(u)`, and `S(u)`, the soundness limit, and the completeness no-overlap guard | Window, limit, and guard definitions in [`Stlsat/Jump/Tableau.lean`](Stlsat/Jump/Tableau.lean#L148) |
+| Corrected JUMP rule | `Node.jump`, `Node.CanJump`, and `Stlsat.Tableau.Jump.Rule` in [`Stlsat/Jump/Tableau.lean`](Stlsat/Jump/Tableau.lean#L689) |
+| Soundness proof | [`Stlsat/Jump/Soundness.lean`](Stlsat/Jump/Soundness.lean) and the soundness-support modules listed below |
+| Completeness proof | [`Stlsat/Jump/Completeness.lean`](Stlsat/Jump/Completeness.lean) and [`CompletenessSplicing.lean`](Stlsat/Jump/CompletenessSplicing.lean) |
 
-The older source in `human/stltree/` was useful during development and uses
-some different notation. The correspondence above targets the current,
-corrected paper in `human/stlsat/`.
 
 ## Formalization architecture
 
@@ -239,6 +239,11 @@ import Stlsat
 
 At present these declarations use only the standard Lean/Mathlib principles
 `propext`, `Classical.choice`, and `Quot.sound`.
+
+## AI use disclosure
+
+This Lean mechanization was mostly generated by OpenAI's [GPT 5.6 Sol](https://openai.com/index/gpt-5-6/)
+starting from the formalization and proofs in [1] and [2], which were entirely written by humans.
 
 ## License
 
