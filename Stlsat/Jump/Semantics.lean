@@ -155,10 +155,10 @@ theorem strictRelease_satisfiedFrom_earlier {interval : Stlsat.Interval}
             (invariantHolds finish startLe (by omega)) holds
 
 /-- With all live endpoints in `K(u)`, no temporal occurrence of a timely
-poised node is discarded by a computed JUMP. -/
-theorem temporal_survives_computed_jump {node : Node Atom} {size : Nat}
+poised node is discarded by an admissible JUMP. -/
+theorem temporal_survives_admissible_jump {node : Node Atom} {size : Nat}
     (poised : node.Poised) (timely : node.Timely)
-    (computed : node.jumpSize? = some size)
+    (admissible : node.JumpSizeAdmissible size)
     (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
     (temporal : occurrence.isTemporal = true) :
     Node.survivesJump (node.time + size) occurrence = true := by
@@ -181,16 +181,16 @@ theorem temporal_survives_computed_jump {node : Node Atom} {size : Nat}
               have beforeLower := beforeLower_of_unmarked_temporal poised timely
                 { id := id, payload := .unmarked (.eventually interval body), parent := parent }
                 present interval (.eventually interval body) rfl rfl
-              have destination := node.jump_destination_le_lower _ interval present rfl computed
-                beforeLower
+              have destination := node.jump_destination_le_lower_of_admissible _ interval present
+                rfl admissible beforeLower
               simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
                 destination.trans interval.lower_le_upper
           | always interval body =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely
                 { id := id, payload := .unmarked (.always interval body), parent := parent }
                 present interval (.always interval body) rfl rfl
-              have destination := node.jump_destination_le_lower _ interval present rfl computed
-                beforeLower
+              have destination := node.jump_destination_le_lower_of_admissible _ interval present
+                rfl admissible beforeLower
               simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
                 destination.trans interval.lower_le_upper
           | strictUntil interval invariant target =>
@@ -199,8 +199,8 @@ theorem temporal_survives_computed_jump {node : Node Atom} {size : Nat}
                   payload := .unmarked (.strictUntil interval invariant target),
                   parent := parent }
                 present interval (.strictUntil interval invariant target) rfl rfl
-              have destination := node.jump_destination_le_lower _ interval present rfl computed
-                beforeLower
+              have destination := node.jump_destination_le_lower_of_admissible _ interval present
+                rfl admissible beforeLower
               simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
                 destination.trans interval.lower_le_upper
           | strictRelease interval target invariant =>
@@ -209,30 +209,44 @@ theorem temporal_survives_computed_jump {node : Node Atom} {size : Nat}
                   payload := .unmarked (.strictRelease interval target invariant),
                   parent := parent }
                 present interval (.strictRelease interval target invariant) rfl rfl
-              have destination := node.jump_destination_le_lower _ interval present rfl computed
-                beforeLower
+              have destination := node.jump_destination_le_lower_of_admissible _ interval present
+                rfl admissible beforeLower
               simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using
                 destination.trans interval.lower_le_upper
       | markedEventually interval body =>
           have future : node.time < interval.upper := by
             exact (timely_iff node).mp timely _ present
-          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          have destination := node.jump_destination_le_upper_of_admissible _ interval present rfl
+            admissible future
           simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
       | markedAlways interval body =>
           have future : node.time < interval.upper := by
             exact (timely_iff node).mp timely _ present
-          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          have destination := node.jump_destination_le_upper_of_admissible _ interval present rfl
+            admissible future
           simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
       | markedStrictUntil interval invariant target =>
           have future : node.time < interval.upper := by
             exact (timely_iff node).mp timely _ present
-          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          have destination := node.jump_destination_le_upper_of_admissible _ interval present rfl
+            admissible future
           simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
       | markedStrictRelease interval target invariant =>
           have future : node.time < interval.upper := by
             exact (timely_iff node).mp timely _ present
-          have destination := node.jump_destination_le_upper _ interval present rfl computed future
+          have destination := node.jump_destination_le_upper_of_admissible _ interval present rfl
+            admissible future
           simpa [Node.survivesJump, AnnotatedOccurrence.interval?] using destination
+
+/-- Compatibility wrapper for the conservative size calculation. -/
+theorem temporal_survives_computed_jump {node : Node Atom} {size : Nat}
+    (poised : node.Poised) (timely : node.Timely)
+    (computed : node.jumpSize? = some size)
+    (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
+    (temporal : occurrence.isTemporal = true) :
+    Node.survivesJump (node.time + size) occurrence = true :=
+  node.temporal_survives_admissible_jump poised timely
+    (node.jumpSizeAdmissible_of_computed computed) occurrence present temporal
 
 /-- Dropping local constraints and unmarking survivors preserves normality. -/
 theorem jump_normal (node : Node Atom) (size : Nat) (normal : node.InStrictNormalForm) :

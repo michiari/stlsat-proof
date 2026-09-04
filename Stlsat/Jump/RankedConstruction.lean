@@ -77,14 +77,14 @@ def RankedHolds (node : Node Atom) (size rank : Nat)
 /-- A successor model supplies the base signal at a poised source node.  The
 only instantaneous change is the locally consistent valuation at the source
 time. -/
-theorem exists_baseSignal {node : Node Atom} {size : Nat}
+theorem exists_baseSignal_of_admissible {node : Node Atom} {size : Nat}
     {semantics : Stlsat.AtomicSemantics Atom}
     (notRejected : ¬node.Rejected semantics) (poised : node.Poised)
-    (computed : node.jumpSize? = some size) (timely : node.Timely)
+    (admissible : node.JumpSizeAdmissible size) (timely : node.Timely)
     (normal : node.InStrictNormalForm)
     (childModel : (node.jump size).Model semantics) :
     ∃ signal : Stlsat.Signal semantics, node.BaseHolds size semantics signal := by
-  have positive := node.jumpSize_pos computed
+  have positive := admissible.1
   have locallyConsistent : node.erase.LocallyConsistent semantics := by
     by_contra inconsistent
     exact notRejected (Or.inr inconsistent)
@@ -94,7 +94,7 @@ theorem exists_baseSignal {node : Node Atom} {size : Nat}
   have childHolds (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
       (temporal : occurrence.isTemporal = true) :
       occurrence.unmark.SatisfiedBy semantics signal (node.time + size) := by
-    have survives := node.temporal_survives_computed_jump poised timely computed occurrence
+    have survives := node.temporal_survives_admissible_jump poised timely admissible occurrence
       present temporal
     have childMem : occurrence.unmark ∈ (node.jump size).label := by
       change occurrence.unmark ∈ node.jumpLabel size
@@ -169,8 +169,8 @@ theorem exists_baseSignal {node : Node Atom} {size : Nat}
           | eventually interval body =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.eventually interval body) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -178,8 +178,8 @@ theorem exists_baseSignal {node : Node Atom} {size : Nat}
           | always interval body =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.always interval body) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -187,8 +187,8 @@ theorem exists_baseSignal {node : Node Atom} {size : Nat}
           | strictUntil interval invariant target =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.strictUntil interval invariant target) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -197,8 +197,8 @@ theorem exists_baseSignal {node : Node Atom} {size : Nat}
           | strictRelease interval target invariant =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.strictRelease interval target invariant) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -214,6 +214,17 @@ theorem exists_baseSignal {node : Node Atom} {size : Nat}
       | markedAlways interval body => trivial
       | markedStrictUntil interval invariant target => trivial
       | markedStrictRelease interval target invariant => trivial
+
+/-- Compatibility wrapper for the conservative JUMP calculation. -/
+theorem exists_baseSignal {node : Node Atom} {size : Nat}
+    {semantics : Stlsat.AtomicSemantics Atom}
+    (notRejected : ¬node.Rejected semantics) (poised : node.Poised)
+    (computed : node.jumpSize? = some size) (timely : node.Timely)
+    (normal : node.InStrictNormalForm)
+    (childModel : (node.jump size).Model semantics) :
+    ∃ signal : Stlsat.Signal semantics, node.BaseHolds size semantics signal :=
+  node.exists_baseSignal_of_admissible notRejected poised
+    (node.jumpSizeAdmissible_of_computed computed) timely normal childModel
 
 end Node
 

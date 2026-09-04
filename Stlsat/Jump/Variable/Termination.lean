@@ -81,7 +81,7 @@ theorem terminationMeasure_decreases {bound : Nat}
       apply Prod.Lex.left _ _
       have timeLe := Node.time_le_of_horizonBounded_of_timely_of_containsTemporal
         parentBounded parentTimely hasTemporal
-      have sizePositive := parent.jumpSize_pos computed
+      have sizePositive := parent.variableJumpSize_pos atomSupport computed
       simp only [Node.jump]
       omega
 

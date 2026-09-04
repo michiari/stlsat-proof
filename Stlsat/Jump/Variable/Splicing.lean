@@ -30,7 +30,7 @@ theorem requirements_supportCompatible
     (normal : node.InStrictNormalForm)
     {signal : Stlsat.Signal semantics}
     (holds : node.RankedHolds size (rank - 1) semantics signal)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (sound : node.VariableSoundSafe support.atomSupport) :
     (first.requirement derivation normal holds).SupportCompatible support.atomSupport
       (second.requirement derivation normal holds) := by
@@ -64,7 +64,8 @@ theorem requirements_supportCompatible
         first.invariant first.shape leftLeaf leftLeafMem
     have secondActive := node.postponedInvariant_active derivation.1.1 timely
       second.source second.sourceMem second.shape
-    rcases node.skippedSemantic_covered_by_supportedIndependentAncestor computed
+    rcases node.skippedSemantic_covered_by_supportedIndependentAncestor
+        (node.variableJumpSizeAdmissible support.atomSupport computed)
         second.skipped derivation second.source second.sourceMem second.edge
         second.invariant second.shape rightLeaf rightLeafMem secondActive with
       ⟨secondWindow, secondWindowMem, secondId, secondLeafEq, secondLower,
@@ -108,7 +109,7 @@ theorem ranked_supportCompatible_requirement
     (poised : node.Poised) (normal : node.InStrictNormalForm)
     {signal : Stlsat.Signal semantics}
     (holds : node.RankedHolds size (rank - 1) semantics signal)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (sound : node.VariableSoundSafe support.atomSupport) :
     (node.rankedRequirement normal holds).SupportCompatible support.atomSupport
       (origin.requirement derivation normal holds) := by
@@ -211,7 +212,7 @@ theorem exists_variableRankedHolds_of_previous
     (derivation : node.FullDerivationValid)
     (poised : node.Poised) (timely : node.Timely)
     (normal : node.InStrictNormalForm)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (sound : node.VariableSoundSafe support.atomSupport)
     {signal : Stlsat.Signal semantics}
     (previous : node.RankedHolds size (rank - 1) semantics signal) :
@@ -260,7 +261,7 @@ theorem exists_variableRankedHolds_of_previous
   intro occurrence present marked bounded
   by_cases already : formulaRank occurrence.formula ≤ rank - 1
   · exact old.2 occurrence present marked already
-  have positiveSize := node.jumpSize_pos computed
+  have positiveSize := node.variableJumpSize_pos support.atomSupport computed
   have later := old.1.2 occurrence present (by
     cases occurrence with
     | mk id payload parent =>
@@ -317,7 +318,7 @@ theorem exists_variableRankedHolds {node : Node Atom} {size : Nat}
     (derivation : node.FullDerivationValid)
     (poised : node.Poised) (timely : node.Timely)
     (normal : node.InStrictNormalForm)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (sound : node.VariableSoundSafe support.atomSupport)
     {baseSignal : Stlsat.Signal semantics}
     (base : node.BaseHolds size semantics baseSignal) (rank : Nat) :
@@ -339,7 +340,7 @@ theorem exists_fullVariableRankedHolds_with_skipped
     (derivation : node.FullDerivationValid)
     (poised : node.Poised) (timely : node.Timely)
     (normal : node.InStrictNormalForm)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (sound : node.VariableSoundSafe support.atomSupport)
     {baseSignal : Stlsat.Signal semantics}
     (base : node.BaseHolds size semantics baseSignal) :

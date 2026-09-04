@@ -186,13 +186,14 @@ end TargetOrigin
 theorem hasModel_variableJump_or_targetEscape
     (support : AtomicSupport semantics Var)
     (node : Node Atom) {size : Nat}
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (derivation : node.FullDerivationValid) (timely : node.Timely)
     (poised : node.Poised) (normal : node.InStrictNormalForm)
     (complete : node.VariableCompleteSafe support.atomSupport)
     (model : node.Model semantics) :
     (node.jump size).HasModel semantics ∨ Nonempty (node.TargetEscape semantics) := by
-  rcases node.hasModel_jump_or_targetOrigin computed poised timely model with
+  rcases node.hasModel_jump_or_targetOrigin_of_admissible
+      (node.variableJumpSizeAdmissible support.atomSupport computed) poised timely model with
     childModel | origin
   · exact Or.inl childModel
   · rcases origin with ⟨origin⟩

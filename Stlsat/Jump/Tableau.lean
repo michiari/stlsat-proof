@@ -326,7 +326,8 @@ theorem CompleteSafe.disjoint_atomic {node : Node Atom}
   complete target targetMem atom
     (node.atomicWindow_mem_conflictWindows atom atomMem) distinct
 
-private def minimum? : List Nat → Option Nat
+/-- The minimum of a finite list, with `none` for the empty list. -/
+def minimum? : List Nat → Option Nat
   | [] => none
   | value :: values =>
       match minimum? values with
@@ -334,7 +335,7 @@ private def minimum? : List Nat → Option Nat
       | some other => some (min value other)
 
 /-- Minimum where `none` represents the paper's `+∞`. -/
-private def minLimit : Option Nat → Option Nat → Option Nat
+def minLimit : Option Nat → Option Nat → Option Nat
   | none, other | other, none => other
   | some left, some right => some (min left right)
 
@@ -366,14 +367,14 @@ noncomputable def jumpSize? (node : Node Atom) : Option Nat :=
   | none => none
   | some bounds => minLimit (some bounds) node.soundLimit?
 
-private theorem minimum?_eq_none_iff (values : List Nat) :
+theorem minimum?_eq_none_iff (values : List Nat) :
     minimum? values = none ↔ values = [] := by
   cases values with
   | nil => simp [minimum?]
   | cons head tail =>
       cases computed : minimum? tail <;> simp [minimum?, computed]
 
-private theorem minimum?_le_of_mem {values : List Nat} {minimum value : Nat}
+theorem minimum?_le_of_mem {values : List Nat} {minimum value : Nat}
     (computed : minimum? values = some minimum) (present : value ∈ values) :
     minimum ≤ value := by
   induction values generalizing minimum with
@@ -397,7 +398,28 @@ private theorem minimum?_le_of_mem {values : List Nat} {minimum value : Nat}
           · exact Nat.min_le_left _ _
           · exact (Nat.min_le_right _ _).trans (ih tailMinimum tailPresent)
 
-private theorem minimum?_positive_of_all_positive {values : List Nat} {minimum : Nat}
+/-- A successfully computed minimum is one of the input values. -/
+theorem minimum?_mem {values : List Nat} {minimum : Nat}
+    (computed : minimum? values = some minimum) : minimum ∈ values := by
+  induction values generalizing minimum with
+  | nil => simp [minimum?] at computed
+  | cons head tail ih =>
+      cases tailMinimum : minimum? tail with
+      | none =>
+          simp only [minimum?, tailMinimum, Option.some.injEq] at computed
+          subst minimum
+          simp
+      | some other =>
+          simp only [minimum?, tailMinimum, Option.some.injEq] at computed
+          subst minimum
+          have otherMem := ih tailMinimum
+          by_cases headLe : head ≤ other
+          · rw [Nat.min_eq_left headLe]
+            simp
+          · rw [Nat.min_eq_right (Nat.le_of_not_ge headLe)]
+            simp [otherMem]
+
+theorem minimum?_positive_of_all_positive {values : List Nat} {minimum : Nat}
     (computed : minimum? values = some minimum)
     (positive : ∀ value ∈ values, 0 < value) : 0 < minimum := by
   induction values generalizing minimum with
@@ -414,7 +436,7 @@ private theorem minimum?_positive_of_all_positive {values : List Nat} {minimum :
           exact (Nat.lt_min).2 ⟨positive head (by simp),
             ih tailMinimum (fun value present => positive value (by simp [present]))⟩
 
-private theorem minLimit_some_left_le {left result : Nat} {right : Option Nat}
+theorem minLimit_some_left_le {left result : Nat} {right : Option Nat}
     (computed : minLimit (some left) right = some result) : result ≤ left := by
   cases right with
   | none =>
@@ -426,7 +448,7 @@ private theorem minLimit_some_left_le {left result : Nat} {right : Option Nat}
       subst result
       exact Nat.min_le_left _ _
 
-private theorem minLimit_positive {left right : Option Nat} {result : Nat}
+theorem minLimit_positive {left right : Option Nat} {result : Nat}
     (leftPositive : ∀ value, left = some value → 0 < value)
     (rightPositive : ∀ value, right = some value → 0 < value)
     (computed : minLimit left right = some result) : 0 < result := by
@@ -503,6 +525,21 @@ theorem jumpSize_pos (node : Node Atom) {size : Nat}
           exact boundsPositive bounds boundsComputed)
         soundPositive
         (by simpa [boundsComputed] using computed)
+
+/-- The size facts shared by the conservative and variable-aware JUMP rules:
+the jump is nonzero and does not cross any future endpoint in `K(u)`. -/
+def JumpSizeAdmissible (node : Node Atom) (size : Nat) : Prop :=
+  0 < size ∧
+    ∀ bound ∈ node.boundCandidates, node.time < bound → node.time + size ≤ bound
+
+omit [DecidableEq Atom] in
+/-- A size computed by the conservative rule is admissible independently of
+how its soundness component was obtained. -/
+theorem jumpSizeAdmissible_of_computed (node : Node Atom) {size : Nat}
+    (computed : node.jumpSize? = some size) : node.JumpSizeAdmissible size :=
+  ⟨node.jumpSize_pos computed,
+    fun bound candidate future ↦
+      node.jumpSize_le_future_boundCandidate (bound := bound) computed candidate future⟩
 
 omit [DecidableEq Atom] in
 /-- The final jump size is bounded by every finite soundness limit. -/
@@ -613,6 +650,17 @@ theorem jump_destination_le_lower (node : Node Atom)
     (node.interval_bounds_mem_boundCandidates occurrence interval present shape).1 future
 
 omit [DecidableEq Atom] in
+/-- An admissible JUMP destination cannot pass the future lower endpoint of a
+live operator. -/
+theorem jump_destination_le_lower_of_admissible (node : Node Atom)
+    (occurrence : AnnotatedOccurrence Atom) (interval : Stlsat.Interval) {size : Nat}
+    (present : occurrence ∈ node.label) (shape : occurrence.interval? = some interval)
+    (admissible : node.JumpSizeAdmissible size) (future : node.time < interval.lower) :
+    node.time + size ≤ interval.lower := by
+  exact admissible.2 interval.lower
+    (node.interval_bounds_mem_boundCandidates occurrence interval present shape).1 future
+
+omit [DecidableEq Atom] in
 /-- A JUMP destination cannot pass the future upper endpoint of a live operator. -/
 theorem jump_destination_le_upper (node : Node Atom)
     (occurrence : AnnotatedOccurrence Atom) (interval : Stlsat.Interval) {size : Nat}
@@ -620,6 +668,17 @@ theorem jump_destination_le_upper (node : Node Atom)
     (computed : node.jumpSize? = some size) (future : node.time < interval.upper) :
     node.time + size ≤ interval.upper := by
   exact node.jumpSize_le_future_boundCandidate computed
+    (node.interval_bounds_mem_boundCandidates occurrence interval present shape).2 future
+
+omit [DecidableEq Atom] in
+/-- An admissible JUMP destination cannot pass the future upper endpoint of a
+live operator. -/
+theorem jump_destination_le_upper_of_admissible (node : Node Atom)
+    (occurrence : AnnotatedOccurrence Atom) (interval : Stlsat.Interval) {size : Nat}
+    (present : occurrence ∈ node.label) (shape : occurrence.interval? = some interval)
+    (admissible : node.JumpSizeAdmissible size) (future : node.time < interval.upper) :
+    node.time + size ≤ interval.upper := by
+  exact admissible.2 interval.upper
     (node.interval_bounds_mem_boundCandidates occurrence interval present shape).2 future
 
 /-- JUMP is enabled exactly when both no-overlap guards and a finite size exist. -/

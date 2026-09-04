@@ -53,8 +53,9 @@ theorem postponedInvariant_active (node : Node Atom)
 omit [DecidableEq Atom] in
 /-- Before considering parent activity, a skipped invariant leaf is covered by
 a validity occurrence of the complete marked source formula. -/
-theorem postponedInvariant_covered_by_source (node : Node Atom) {size offset : Nat}
-    (computed : node.jumpSize? = some size) (strictlySkipped : offset < size)
+theorem postponedInvariant_covered_by_source_of_admissible
+    (node : Node Atom) {size offset : Nat}
+    (admissible : node.JumpSizeAdmissible size) (strictlySkipped : offset < size)
     (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
     (edge : Nat) (invariant : Stlsat.Formula Atom)
     (sourceShape : source.postponedInvariant? = some (edge, invariant))
@@ -86,9 +87,9 @@ theorem postponedInvariant_covered_by_source (node : Node Atom) {size offset : N
           · simp [sourceValidity, ValidityOccurrence.prefixPath,
               ValidityOccurrence.through]
             omega
-          · have destination := node.jump_destination_le_upper
+          · have destination := node.jump_destination_le_upper_of_admissible
                 { id := id, payload := .markedAlways interval body, parent := parent }
-                interval sourceMem rfl computed active.2
+                interval sourceMem rfl admissible active.2
             simp [sourceValidity, ValidityOccurrence.prefixPath,
               ValidityOccurrence.through]
             omega
@@ -111,9 +112,9 @@ theorem postponedInvariant_covered_by_source (node : Node Atom) {size offset : N
           · simp [sourceValidity, ValidityOccurrence.prefixPath,
               ValidityOccurrence.beforeTarget]
             omega
-          · have destination := node.jump_destination_le_upper
+          · have destination := node.jump_destination_le_upper_of_admissible
                 { id := id, payload := .markedStrictUntil interval left right, parent := parent }
-                interval sourceMem rfl computed active.2
+                interval sourceMem rfl admissible active.2
             simp [sourceValidity, ValidityOccurrence.prefixPath,
               ValidityOccurrence.beforeTarget]
             omega
@@ -134,12 +135,32 @@ theorem postponedInvariant_covered_by_source (node : Node Atom) {size offset : N
           · simp [sourceValidity, ValidityOccurrence.prefixPath,
               ValidityOccurrence.through]
             omega
-          · have destination := node.jump_destination_le_upper
+          · have destination := node.jump_destination_le_upper_of_admissible
                 { id := id, payload := .markedStrictRelease interval left right, parent := parent }
-                interval sourceMem rfl computed active.2
+                interval sourceMem rfl admissible active.2
             simp [sourceValidity, ValidityOccurrence.prefixPath,
               ValidityOccurrence.through]
             omega
+
+omit [DecidableEq Atom] in
+/-- Compatibility wrapper for the conservative JUMP calculation. -/
+theorem postponedInvariant_covered_by_source (node : Node Atom) {size offset : Nat}
+    (computed : node.jumpSize? = some size) (strictlySkipped : offset < size)
+    (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
+    (edge : Nat) (invariant : Stlsat.Formula Atom)
+    (sourceShape : source.postponedInvariant? = some (edge, invariant))
+    (validity : ValidityOccurrence)
+    (validityMem : validity ∈ FormulaValidity.validityOccurrences invariant)
+    (active : match source.interval? with
+      | some interval => interval.lower ≤ node.time ∧ node.time < interval.upper
+      | none => False) :
+    ∃ sourceValidity ∈ FormulaValidity.validityOccurrences source.formula,
+      source.id ++ sourceValidity.path = source.id ++ [edge] ++ validity.path ∧
+      sourceValidity.window.lower ≤ node.time + offset + validity.window.lower ∧
+      node.time + offset + validity.window.upper ≤ sourceValidity.window.upper :=
+  node.postponedInvariant_covered_by_source_of_admissible
+    (node.jumpSizeAdmissible_of_computed computed) strictlySkipped source sourceMem edge
+    invariant sourceShape validity validityMem active
 
 omit [DecidableEq Atom] in
 /-- Every validity occurrence of a live temporal formula is covered by an
@@ -206,6 +227,35 @@ decreasing_by
 omit [DecidableEq Atom] in
 /-- Parent-active skipped invariant leaves have the same independent-ancestor
 coverage as independent sources. -/
+theorem postponedInvariant_covered_by_independent_ancestor_of_admissible
+    (node : Node Atom)
+    {size offset : Nat} (admissible : node.JumpSizeAdmissible size)
+    (strictlySkipped : offset < size) (provenance : node.ProvenanceValid)
+    (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
+    (sourceTemporal : source.isTemporal = true)
+    (edge : Nat) (invariant : Stlsat.Formula Atom)
+    (sourceShape : source.postponedInvariant? = some (edge, invariant))
+    (validity : ValidityOccurrence)
+    (validityMem : validity ∈ FormulaValidity.validityOccurrences invariant)
+    (active : match source.interval? with
+      | some interval => interval.lower ≤ node.time ∧ node.time < interval.upper
+      | none => False) :
+    ∃ window ∈ node.independentWindows,
+      window.id = source.id ++ [edge] ++ validity.path ∧
+      window.window.lower ≤ node.time + offset + validity.window.lower ∧
+      node.time + offset + validity.window.upper ≤ window.window.upper := by
+  rcases node.postponedInvariant_covered_by_source_of_admissible admissible strictlySkipped
+      source sourceMem edge invariant sourceShape validity validityMem active with
+    ⟨sourceValidity, sourceValidityMem, sourceId, sourceLower, sourceUpper⟩
+  rcases node.validity_covered_by_independent_ancestor provenance source sourceMem
+      sourceTemporal sourceValidity sourceValidityMem with
+    ⟨window, windowMem, windowId, ancestorLower, ancestorUpper⟩
+  refine ⟨window, windowMem, ?_, ancestorLower.trans sourceLower,
+    sourceUpper.trans ancestorUpper⟩
+  rw [windowId, sourceId]
+
+omit [DecidableEq Atom] in
+/-- Compatibility wrapper for the conservative JUMP calculation. -/
 theorem postponedInvariant_covered_by_independent_ancestor (node : Node Atom)
     {size offset : Nat} (computed : node.jumpSize? = some size)
     (strictlySkipped : offset < size) (provenance : node.ProvenanceValid)
@@ -221,16 +271,10 @@ theorem postponedInvariant_covered_by_independent_ancestor (node : Node Atom)
     ∃ window ∈ node.independentWindows,
       window.id = source.id ++ [edge] ++ validity.path ∧
       window.window.lower ≤ node.time + offset + validity.window.lower ∧
-      node.time + offset + validity.window.upper ≤ window.window.upper := by
-  rcases node.postponedInvariant_covered_by_source computed strictlySkipped source sourceMem
-      edge invariant sourceShape validity validityMem active with
-    ⟨sourceValidity, sourceValidityMem, sourceId, sourceLower, sourceUpper⟩
-  rcases node.validity_covered_by_independent_ancestor provenance source sourceMem
-      sourceTemporal sourceValidity sourceValidityMem with
-    ⟨window, windowMem, windowId, ancestorLower, ancestorUpper⟩
-  refine ⟨window, windowMem, ?_, ancestorLower.trans sourceLower,
-    sourceUpper.trans ancestorUpper⟩
-  rw [windowId, sourceId]
+      node.time + offset + validity.window.upper ≤ window.window.upper :=
+  node.postponedInvariant_covered_by_independent_ancestor_of_admissible
+    (node.jumpSizeAdmissible_of_computed computed) strictlySkipped provenance source sourceMem
+    sourceTemporal edge invariant sourceShape validity validityMem active
 
 omit [DecidableEq Atom] in
 private theorem isTemporal_of_postponedInvariant

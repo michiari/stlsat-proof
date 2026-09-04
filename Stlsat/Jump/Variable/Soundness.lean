@@ -26,13 +26,14 @@ theorem variableSoundnessGuardProvidesSkippedModel
     (derivation : node.FullDerivationValid)
     (notRejected : ¬node.Rejected semantics) (poised : node.Poised)
     (sound : node.VariableSoundSafe support.atomSupport)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (timely : node.Timely) (normal : node.InStrictNormalForm)
     (childHasModel : (node.jump size).HasModel semantics) :
     ∃ model : (node.jump size).Model semantics,
       node.SkippedInvariantsHold size semantics model.signal := by
   let childModel : (node.jump size).Model semantics := Classical.choice childHasModel
-  rcases node.exists_baseSignal notRejected poised computed timely normal childModel with
+  rcases node.exists_baseSignal_of_admissible notRejected poised
+      (node.variableJumpSizeAdmissible support.atomSupport computed) timely normal childModel with
     ⟨baseSignal, base⟩
   rcases node.exists_fullVariableRankedHolds_with_skipped support derivation poised timely
       normal computed sound base with ⟨signal, ranked, allSkipped⟩
@@ -107,13 +108,13 @@ theorem hasModel_of_variableGuardedJump
     (derivation : node.FullDerivationValid)
     (notRejected : ¬node.Rejected semantics) (poised : node.Poised)
     (sound : node.VariableSoundSafe support.atomSupport)
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? support.atomSupport = some size)
     (timely : node.Timely) (normal : node.InStrictNormalForm)
     (childModel : (node.jump size).HasModel semantics) : node.HasModel semantics := by
   rcases node.variableSoundnessGuardProvidesSkippedModel semantics support derivation
       notRejected poised sound computed timely normal childModel with ⟨model, skipped⟩
-  exact Node.hasModel_of_jump_of_model_of_skippedInvariants notRejected poised computed timely
-    normal model skipped
+  exact Node.hasModel_of_jump_of_model_of_skippedInvariants_of_admissible notRejected poised
+    (node.variableJumpSizeAdmissible support.atomSupport computed) timely normal model skipped
 
 end Node
 

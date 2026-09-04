@@ -13,7 +13,8 @@ import Stlsat.Tableau.Construction
 
 The construction uses the shared raw node/tree framework.  At a poised
 temporal node it selects a variable-aware JUMP exactly when its two guards and
-the common positive jump size are available; otherwise it selects `STEP`.
+the support-filtered positive jump size are available; otherwise it selects
+`STEP`.
 -/
 
 namespace Stlsat.Tableau

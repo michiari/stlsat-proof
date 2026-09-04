@@ -611,14 +611,268 @@ def VariableCompleteSafe {Var : Type w} (node : Node Atom)
       VariableConflict atomSupport target conflict →
         ¬SupportedWindowsOverlap target conflict
 
+/-- The paper's variable-aware soundness limit.  Only ordered `N(u)`/`O(u)`
+pairs whose signed leaves have overlapping variable support contribute a
+finite gap; `none` denotes `+∞`. -/
+noncomputable def variableSoundLimit? {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) : Option Nat := by
+  classical
+  exact minimum? (node.supportedInvariantWindows.flatMap fun invariant ↦
+    node.supportedIndependentWindows.filterMap fun other ↦
+      if VariableConflict atomSupport invariant other ∧
+          invariant.window.upper < other.window.lower then
+        some (other.window.lower - invariant.window.upper)
+      else none)
+
+/-- The optimized jump size `k⁺(u)`: the temporal-bounds limit combined
+with the support-filtered soundness limit.  It can be strictly larger than
+the conservative `jumpSize?`. -/
+noncomputable def variableJumpSize? {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) : Option Nat :=
+  match node.boundsLimit? with
+  | none => none
+  | some bounds => minLimit (some bounds) (node.variableSoundLimit? atomSupport)
+
+omit [DecidableEq Atom] in
+/-- A variable-aware jump cannot pass a future member of `K(u)`. -/
+theorem variableJumpSize_le_future_boundCandidate {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {size bound : Nat}
+    (computed : node.variableJumpSize? atomSupport = some size)
+    (candidate : bound ∈ node.boundCandidates) (future : node.time < bound) :
+    node.time + size ≤ bound := by
+  classical
+  unfold variableJumpSize? at computed
+  cases boundsComputed : node.boundsLimit? with
+  | none => simp [boundsComputed] at computed
+  | some bounds =>
+      have sizeLeBounds : size ≤ bounds :=
+        minLimit_some_left_le (by simpa [boundsComputed] using computed)
+      have distancePresent : bound - node.time ∈
+          (node.boundCandidates.filter (node.time < ·)).map (· - node.time) := by
+        apply List.mem_map.mpr
+        exact ⟨bound, by simp [candidate, future], rfl⟩
+      have boundsLeDistance : bounds ≤ bound - node.time := by
+        apply minimum?_le_of_mem (value := bound - node.time)
+        · simpa [boundsLimit?] using boundsComputed
+        · exact distancePresent
+      omega
+
+omit [DecidableEq Atom] in
+/-- Every computed variable-aware JUMP advances time. -/
+theorem variableJumpSize_pos {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {size : Nat}
+    (computed : node.variableJumpSize? atomSupport = some size) : 0 < size := by
+  classical
+  have boundsPositive : ∀ value, node.boundsLimit? = some value → 0 < value := by
+    intro value valueComputed
+    apply minimum?_positive_of_all_positive (by simpa [boundsLimit?] using valueComputed)
+    intro distance present
+    rcases List.mem_map.mp present with ⟨bound, boundPresent, rfl⟩
+    have future : node.time < bound := by
+      simpa using (List.mem_filter.mp boundPresent).2
+    omega
+  have soundPositive : ∀ value,
+      node.variableSoundLimit? atomSupport = some value → 0 < value := by
+    intro value valueComputed
+    apply minimum?_positive_of_all_positive
+      (by simpa [variableSoundLimit?] using valueComputed)
+    intro distance present
+    rcases List.mem_flatMap.mp present with ⟨invariant, _, present⟩
+    rcases List.mem_filterMap.mp present with ⟨other, _, selected⟩
+    split at selected <;> simp_all
+    omega
+  unfold variableJumpSize? at computed
+  cases boundsComputed : node.boundsLimit? with
+  | none => simp [boundsComputed] at computed
+  | some bounds =>
+      apply minLimit_positive
+        (left := some bounds) (right := node.variableSoundLimit? atomSupport)
+        (fun value equal ↦ by
+          simp only [Option.some.injEq] at equal
+          subst value
+          exact boundsPositive bounds boundsComputed)
+        soundPositive
+        (by simpa [boundsComputed] using computed)
+
+omit [DecidableEq Atom] in
+/-- Every variable-aware computed size satisfies the common temporal-bounds
+contract used by the semantic JUMP lemmas. -/
+theorem variableJumpSizeAdmissible {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {size : Nat}
+    (computed : node.variableJumpSize? atomSupport = some size) :
+    node.JumpSizeAdmissible size :=
+  ⟨node.variableJumpSize_pos atomSupport computed,
+    fun bound candidate future ↦
+      node.variableJumpSize_le_future_boundCandidate atomSupport (bound := bound) computed
+        candidate future⟩
+
+omit [DecidableEq Atom] in
+/-- The optimized size is bounded by its finite support-filtered soundness
+limit. -/
+theorem variableJumpSize_le_soundLimit {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {size limit : Nat}
+    (computed : node.variableJumpSize? atomSupport = some size)
+    (soundComputed : node.variableSoundLimit? atomSupport = some limit) :
+    size ≤ limit := by
+  classical
+  unfold variableJumpSize? at computed
+  cases boundsComputed : node.boundsLimit? with
+  | none => simp [boundsComputed] at computed
+  | some bounds =>
+      simp [boundsComputed, soundComputed, minLimit] at computed
+      omega
+
+omit [DecidableEq Atom] in
+/-- Every ordered, support-conflicting `N(u)`/`O(u)` pair bounds the optimized
+jump. -/
+theorem variableJumpSize_le_soundGap {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {size : Nat}
+    (computed : node.variableJumpSize? atomSupport = some size)
+    (invariant other : SupportedWindowOccurrence Atom)
+    (invariantMem : invariant ∈ node.supportedInvariantWindows)
+    (otherMem : other ∈ node.supportedIndependentWindows)
+    (conflict : VariableConflict atomSupport invariant other)
+    (ordered : invariant.window.upper < other.window.lower) :
+    size ≤ other.window.lower - invariant.window.upper := by
+  classical
+  let gap := other.window.lower - invariant.window.upper
+  have gapMem : gap ∈ node.supportedInvariantWindows.flatMap fun invariant ↦
+      node.supportedIndependentWindows.filterMap fun other ↦
+        if VariableConflict atomSupport invariant other ∧
+            invariant.window.upper < other.window.lower then
+          some (other.window.lower - invariant.window.upper)
+        else none := by
+    apply List.mem_flatMap.mpr
+    refine ⟨invariant, invariantMem, ?_⟩
+    apply List.mem_filterMap.mpr
+    exact ⟨other, otherMem, by simp [gap, conflict, ordered]⟩
+  cases soundComputed : node.variableSoundLimit? atomSupport with
+  | none =>
+      have empty := (minimum?_eq_none_iff _).mp (by
+        simpa [variableSoundLimit?] using soundComputed)
+      rw [empty] at gapMem
+      simp at gapMem
+  | some limit =>
+      exact (node.variableJumpSize_le_soundLimit atomSupport computed soundComputed).trans
+        (minimum?_le_of_mem
+          (by simpa [variableSoundLimit?] using soundComputed) gapMem)
+
+omit [DecidableEq Atom] in
+/-- Every optimized sound-gap candidate is also a conservative candidate.
+Consequently, whenever the optimized sound limit is finite, the conservative
+sound limit is no larger. -/
+theorem soundLimit_le_variableSoundLimit {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {variableLimit : Nat}
+    (variableComputed : node.variableSoundLimit? atomSupport = some variableLimit) :
+    ∃ conservativeLimit,
+      node.soundLimit? = some conservativeLimit ∧ conservativeLimit ≤ variableLimit := by
+  classical
+  have variableMem : variableLimit ∈
+      node.supportedInvariantWindows.flatMap fun invariant ↦
+        node.supportedIndependentWindows.filterMap fun other ↦
+          if VariableConflict atomSupport invariant other ∧
+              invariant.window.upper < other.window.lower then
+            some (other.window.lower - invariant.window.upper)
+          else none :=
+    minimum?_mem (by simpa [variableSoundLimit?] using variableComputed)
+  rcases List.mem_flatMap.mp variableMem with ⟨invariant, invariantMem, variableMem⟩
+  rcases List.mem_filterMap.mp variableMem with ⟨other, otherMem, selected⟩
+  by_cases eligible : VariableConflict atomSupport invariant other ∧
+      invariant.window.upper < other.window.lower
+  · have gapEq : other.window.lower - invariant.window.upper = variableLimit := by
+      simpa [eligible] using selected
+    have conservativeMem : variableLimit ∈
+        node.invariantWindows.flatMap fun invariant ↦
+          node.independentWindows.filterMap fun other ↦
+            if invariant.id ≠ other.id ∧ invariant.window.upper < other.window.lower then
+              some (other.window.lower - invariant.window.upper)
+            else none := by
+      apply List.mem_flatMap.mpr
+      refine ⟨invariant.erase, node.erase_mem_invariantWindows invariantMem, ?_⟩
+      apply List.mem_filterMap.mpr
+      refine ⟨other.erase, node.erase_mem_independentWindows otherMem, ?_⟩
+      simp [SupportedWindowOccurrence.erase, eligible.1.1, eligible.2, gapEq]
+    cases conservativeComputed : node.soundLimit? with
+    | none =>
+        have empty := (minimum?_eq_none_iff _).mp (by
+          simpa [soundLimit?] using conservativeComputed)
+        rw [empty] at conservativeMem
+        simp at conservativeMem
+    | some conservativeLimit =>
+        exact ⟨conservativeLimit, rfl,
+          minimum?_le_of_mem
+            (by simpa [soundLimit?] using conservativeComputed) conservativeMem⟩
+  · simp [eligible] at selected
+
+omit [DecidableEq Atom] in
+/-- Filtering the soundness gaps by variable support never shortens a finite
+JUMP.  The inequality can be strict when the conservative minimum comes from
+a support-disjoint pair. -/
+theorem jumpSize_le_variableJumpSize {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var)
+    {conservativeSize variableSize : Nat}
+    (conservativeComputed : node.jumpSize? = some conservativeSize)
+    (variableComputed : node.variableJumpSize? atomSupport = some variableSize) :
+    conservativeSize ≤ variableSize := by
+  classical
+  unfold jumpSize? at conservativeComputed
+  unfold variableJumpSize? at variableComputed
+  cases boundsComputed : node.boundsLimit? with
+  | none => simp [boundsComputed] at conservativeComputed
+  | some bounds =>
+      cases conservativeSound : node.soundLimit? with
+      | none =>
+          cases variableSound : node.variableSoundLimit? atomSupport with
+          | none =>
+              simp [boundsComputed, conservativeSound, variableSound, minLimit] at *
+              omega
+          | some variableLimit =>
+              rcases node.soundLimit_le_variableSoundLimit atomSupport variableSound with
+                ⟨conservativeLimit, conservativeFinite, _⟩
+              rw [conservativeSound] at conservativeFinite
+              simp at conservativeFinite
+      | some conservativeLimit =>
+          cases variableSound : node.variableSoundLimit? atomSupport with
+          | none =>
+              simp [boundsComputed, conservativeSound, variableSound, minLimit] at *
+              omega
+          | some variableLimit =>
+              rcases node.soundLimit_le_variableSoundLimit atomSupport variableSound with
+                ⟨actualConservative, actualComputed, limitLe⟩
+              rw [conservativeSound] at actualComputed
+              simp only [Option.some.injEq] at actualComputed
+              subst actualConservative
+              simp [boundsComputed, conservativeSound, variableSound, minLimit] at *
+              omega
+
+omit [DecidableEq Atom] in
+/-- A finite conservative jump implies that the variable-aware calculation
+also has a finite (possibly larger) result, because both use the same finite
+`K(u)` limit. -/
+theorem exists_variableJumpSize_of_jumpSize {Var : Type w}
+    (node : Node Atom) (atomSupport : Atom → Finset Var) {size : Nat}
+    (computed : node.jumpSize? = some size) :
+    ∃ variableSize, node.variableJumpSize? atomSupport = some variableSize := by
+  classical
+  have finiteBounds : ∃ bounds, node.boundsLimit? = some bounds := by
+    unfold jumpSize? at computed
+    cases boundsComputed : node.boundsLimit? with
+    | none => simp [boundsComputed] at computed
+    | some bounds => exact ⟨bounds, rfl⟩
+  rcases finiteBounds with ⟨bounds, boundsComputed⟩
+  cases soundComputed : node.variableSoundLimit? atomSupport with
+  | none =>
+      exact ⟨bounds, by simp [variableJumpSize?, boundsComputed, soundComputed, minLimit]⟩
+  | some sound =>
+      exact ⟨min bounds sound,
+        by simp [variableJumpSize?, boundsComputed, soundComputed, minLimit]⟩
+
 omit [DecidableEq Atom] in
 /-- A strictly skipped copy of an invariant window cannot overlap a distinct
-support-dependent independent window.  The ordered-window case reuses the
-conservative jump-size gap, which is intentionally still part of the shared
-size calculation. -/
+support-dependent independent window. -/
 theorem shiftedSupportedInvariant_safe {Var : Type w} (node : Node Atom)
     (atomSupport : Atom → Finset Var) {size offset : Nat}
-    (computed : node.jumpSize? = some size)
+    (computed : node.variableJumpSize? atomSupport = some size)
     (sound : node.VariableSoundSafe atomSupport) (strictlySkipped : offset < size)
     (invariant other : SupportedWindowOccurrence Atom)
     (invariantMem : invariant ∈ node.supportedInvariantWindows)
@@ -632,11 +886,8 @@ theorem shiftedSupportedInvariant_safe {Var : Type w} (node : Node Atom)
     apply initiallyDisjoint
     exact ⟨by omega, by omega⟩
   rcases separated with invariantBefore | otherBefore
-  · have bounded := node.jumpSize_le_soundGap computed invariant.erase other.erase
-      (node.erase_mem_invariantWindows invariantMem)
-      (node.erase_mem_independentWindows otherMem) conflict.1 invariantBefore
-    have bounded' : size ≤ other.window.lower - invariant.window.upper := by
-      simpa [SupportedWindowOccurrence.erase] using bounded
+  · have bounded := node.variableJumpSize_le_soundGap atomSupport computed invariant other
+      invariantMem otherMem conflict invariantBefore
     intro overlap
     rcases overlap with ⟨left, right⟩
     simp only [SupportedWindowOccurrence.shift, Stlsat.Interval.shift] at left right
@@ -668,12 +919,11 @@ theorem variableCompleteSafe_of_completeSafe {Var : Type w} (node : Node Atom)
     conflict.erase (node.erase_mem_conflictWindows conflictMem) variableConflict.1
   exact erased overlap
 
-/-- Enabling condition for the variable-aware JUMP configuration.  Jump-size
-calculation is intentionally shared with the conservative rule. -/
+/-- Enabling condition for the variable-aware JUMP configuration. -/
 noncomputable def CanVariableJump {Var : Type w} (node : Node Atom)
     (atomSupport : Atom → Finset Var) : Prop :=
   node.VariableSoundSafe atomSupport ∧ node.VariableCompleteSafe atomSupport ∧
-    ∃ size, node.jumpSize? = some size
+    ∃ size, node.variableJumpSize? atomSupport = some size
 
 omit [DecidableEq Atom] in
 /-- Every conservative JUMP is admitted by the variable-aware checker. -/
@@ -682,7 +932,8 @@ theorem canVariableJump_of_canJump {Var : Type w} (node : Node Atom)
     node.CanVariableJump atomSupport :=
   ⟨node.variableSoundSafe_of_soundSafe atomSupport canJump.1,
     node.variableCompleteSafe_of_completeSafe atomSupport canJump.2.1,
-    canJump.2.2⟩
+    let ⟨_size, computed⟩ := canJump.2.2
+    node.exists_variableJumpSize_of_jumpSize atomSupport computed⟩
 
 end Node
 
@@ -702,7 +953,7 @@ inductive Rule {Atom : Type u} {Var : Type w} [DecidableEq Atom]
       (hasTemporal : node.ContainsTemporal)
       (sound : node.VariableSoundSafe atomSupport)
       (complete : node.VariableCompleteSafe atomSupport)
-      (size : Nat) (computed : node.jumpSize? = some size) :
+      (size : Nat) (computed : node.variableJumpSize? atomSupport = some size) :
       Rule semantics atomSupport node [node.jump size]
 
 def TreeWellFormed {Atom : Type u} {Var : Type w} [DecidableEq Atom]

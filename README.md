@@ -202,9 +202,11 @@ complete development.
 - Pairwise satisfiability is deliberately not used: it does not imply global
   satisfiability, even for Boolean constraints or LRA.  The corresponding
   counterexamples are kernel-checked in `AtomicSupportCounterexamples`.
-- The optimized guards ignore disjoint supports. Jump-size calculation still
-  uses the shared conservative ordered-window gaps, which may shorten a jump
-  but cannot remove accepting behavior or compromise correctness.
+- The optimized guards and `k*sound` calculation ignore ordered-window gaps
+  between disjoint supports. Thus `variableJumpSize?` can be strictly larger
+  than the conservative `jumpSize?`; `jumpSize_le_variableJumpSize` records
+  that it is never smaller. Distinct occurrences on the same support still
+  count as conflicts regardless of literal polarity.
 - The syntax retains native `F` and `G` operators in addition to strict until
   and strict release. The JUMP window definitions include the corresponding
   direct cases.

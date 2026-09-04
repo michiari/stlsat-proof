@@ -100,7 +100,7 @@ theorem semantic_covered_by_supportedIndependentAncestor
 ancestor window with the same leaf and with the original containment bounds. -/
 theorem skippedSemantic_covered_by_supportedIndependentAncestor
     (node : Node Atom) {size offset : Nat}
-    (computed : node.jumpSize? = some size) (strictlySkipped : offset < size)
+    (admissible : node.JumpSizeAdmissible size) (strictlySkipped : offset < size)
     (derivation : node.FullDerivationValid)
     (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
     (edge : Nat) (invariant : Stlsat.Formula Atom)
@@ -129,9 +129,10 @@ theorem skippedSemantic_covered_by_supportedIndependentAncestor
         cases payload <;>
           simp_all [AnnotatedOccurrence.postponedInvariant?,
             AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal]
-  rcases node.postponedInvariant_covered_by_independent_ancestor computed strictlySkipped
-      derivation.1.1.1 source sourceMem sourceTemporal edge invariant shape leaf.toValidity
-      validityMem active with ⟨window, windowMem, identifier, lower, upper⟩
+  rcases node.postponedInvariant_covered_by_independent_ancestor_of_admissible admissible
+      strictlySkipped derivation.1.1.1 source sourceMem sourceTemporal edge invariant shape
+      leaf.toValidity validityMem active with
+    ⟨window, windowMem, identifier, lower, upper⟩
   have sourceWindowId : window.id = source.id ++ sourceLeaf.path := by
     rw [identifier, sourceIdentifier]
     rfl

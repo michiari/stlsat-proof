@@ -624,9 +624,9 @@ structure TargetOrigin (node : Node Atom)
 marked target alternatives was witnessed strictly inside the skipped phase.
 The latter is precisely the information needed to return to the corresponding
 satisfy branch. -/
-theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
+theorem unmark_satisfiedBy_at_jump_or_targetOrigin_of_admissible (node : Node Atom)
     {size : Nat} {semantics : Stlsat.AtomicSemantics Atom}
-    (computed : node.jumpSize? = some size) (poised : node.Poised)
+    (admissible : node.JumpSizeAdmissible size) (poised : node.Poised)
     (timely : node.Timely) (model : node.Model semantics)
     (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
     (survives : survivesJump (node.time + size) source = true) :
@@ -634,7 +634,7 @@ theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
       Nonempty (node.TargetOrigin semantics) := by
   have sourceHolds := (Node.satisfiedBy_iff node semantics model.signal).1
     model.satisfies source sourceMem
-  have sizePositive := node.jumpSize_pos computed
+  have sizePositive := admissible.1
   cases source with
   | mk id payload parent =>
       cases payload with
@@ -664,9 +664,9 @@ theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
                 · exact ⟨_, Expansion.eventuallyAtEnd
                     ⟨id, .unmarked (.eventually interval body), parent⟩
                     interval body rfl sourceMem (by omega)⟩
-              have destination := node.jump_destination_le_lower
+              have destination := node.jump_destination_le_lower_of_admissible
                 ⟨id, .unmarked (.eventually interval body), parent⟩ interval
-                sourceMem rfl computed beforeLower
+                sourceMem rfl admissible beforeLower
               left
               change (Stlsat.Formula.eventually interval body).SatisfiesFrom
                 semantics model.signal (node.time + size)
@@ -688,9 +688,9 @@ theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
                 · exact ⟨_, Expansion.alwaysAtEnd
                     ⟨id, .unmarked (.always interval body), parent⟩
                     interval body rfl sourceMem (by omega)⟩
-              have destination := node.jump_destination_le_lower
+              have destination := node.jump_destination_le_lower_of_admissible
                 ⟨id, .unmarked (.always interval body), parent⟩ interval
-                sourceMem rfl computed beforeLower
+                sourceMem rfl admissible beforeLower
               left
               change (Stlsat.Formula.always interval body).SatisfiesFrom
                 semantics model.signal (node.time + size)
@@ -712,9 +712,9 @@ theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
                 · exact ⟨_, Expansion.strictUntilAtEnd
                     ⟨id, .unmarked (.strictUntil interval invariant target), parent⟩
                     interval invariant target rfl sourceMem (by omega)⟩
-              have destination := node.jump_destination_le_lower
+              have destination := node.jump_destination_le_lower_of_admissible
                 ⟨id, .unmarked (.strictUntil interval invariant target), parent⟩ interval
-                sourceMem rfl computed beforeLower
+                sourceMem rfl admissible beforeLower
               left
               change (Stlsat.Formula.strictUntil interval invariant target).SatisfiesFrom
                 semantics model.signal (node.time + size)
@@ -736,9 +736,9 @@ theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
                 · exact ⟨_, Expansion.strictReleaseAtEnd
                     ⟨id, .unmarked (.strictRelease interval target invariant), parent⟩
                     interval target invariant rfl sourceMem (by omega)⟩
-              have destination := node.jump_destination_le_lower
+              have destination := node.jump_destination_le_lower_of_admissible
                 ⟨id, .unmarked (.strictRelease interval target invariant), parent⟩ interval
-                sourceMem rfl computed beforeLower
+                sourceMem rfl admissible beforeLower
               left
               change (Stlsat.Formula.strictRelease interval target invariant).SatisfiesFrom
                 semantics model.signal (node.time + size)
@@ -866,11 +866,23 @@ theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
                     omega)
                 simpa [targetEqual, absolute] using failed
 
-/-- Node-level JUMP dichotomy.  A current model either models the unique
-JUMP successor directly, or exposes an intermediate postponed target. -/
-theorem hasModel_jump_or_targetOrigin (node : Node Atom)
+/-- Compatibility wrapper for the conservative JUMP calculation. -/
+theorem unmark_satisfiedBy_at_jump_or_targetOrigin (node : Node Atom)
     {size : Nat} {semantics : Stlsat.AtomicSemantics Atom}
     (computed : node.jumpSize? = some size) (poised : node.Poised)
+    (timely : node.Timely) (model : node.Model semantics)
+    (source : AnnotatedOccurrence Atom) (sourceMem : source ∈ node.label)
+    (survives : survivesJump (node.time + size) source = true) :
+    source.unmark.SatisfiedBy semantics model.signal (node.time + size) ∨
+      Nonempty (node.TargetOrigin semantics) :=
+  node.unmark_satisfiedBy_at_jump_or_targetOrigin_of_admissible
+    (node.jumpSizeAdmissible_of_computed computed) poised timely model source sourceMem survives
+
+/-- Node-level JUMP dichotomy.  A current model either models the unique
+JUMP successor directly, or exposes an intermediate postponed target. -/
+theorem hasModel_jump_or_targetOrigin_of_admissible (node : Node Atom)
+    {size : Nat} {semantics : Stlsat.AtomicSemantics Atom}
+    (admissible : node.JumpSizeAdmissible size) (poised : node.Poised)
     (timely : node.Timely) (model : node.Model semantics) :
     (node.jump size).HasModel semantics ∨
       Nonempty (node.TargetOrigin semantics) := by
@@ -888,10 +900,19 @@ theorem hasModel_jump_or_targetOrigin (node : Node Atom)
     change occurrence ∈ node.jumpLabel size at occurrenceMem
     rcases Finset.mem_image.mp occurrenceMem with ⟨source, retained, rfl⟩
     rcases Finset.mem_filter.mp retained with ⟨sourceMem, survives⟩
-    rcases node.unmark_satisfiedBy_at_jump_or_targetOrigin computed poised timely
+    rcases node.unmark_satisfiedBy_at_jump_or_targetOrigin_of_admissible admissible poised timely
         model source sourceMem survives with destinationHolds | origin
     · exact False.elim (occurrenceFails destinationHolds)
     · exact origin
+
+/-- Compatibility wrapper for the conservative JUMP calculation. -/
+theorem hasModel_jump_or_targetOrigin (node : Node Atom)
+    {size : Nat} {semantics : Stlsat.AtomicSemantics Atom}
+    (computed : node.jumpSize? = some size) (poised : node.Poised)
+    (timely : node.Timely) (model : node.Model semantics) :
+    (node.jump size).HasModel semantics ∨ Nonempty (node.TargetOrigin semantics) :=
+  node.hasModel_jump_or_targetOrigin_of_admissible
+    (node.jumpSizeAdmissible_of_computed computed) poised timely model
 
 /-- Package a semantic node model as one heterogeneous requirement, omitting
 only vacuous truth leaves. -/

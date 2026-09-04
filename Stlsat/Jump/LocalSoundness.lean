@@ -30,19 +30,20 @@ def SkippedInvariantsHold (node : Node Atom) (size : Nat)
       ∀ instant, node.time < instant → instant < node.time + size →
         invariant.Satisfies semantics signal instant
 
-/-- Backward model preservation for a computed JUMP, factored through the
+/-- Backward model preservation for an admissible JUMP, factored through the
 precise semantic obligation imposed at its skipped instants. -/
-theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size : Nat}
+theorem hasModel_of_jump_of_model_of_skippedInvariants_of_admissible
+    {node : Node Atom} {size : Nat}
     {semantics : Stlsat.AtomicSemantics Atom}
     (notRejected : ¬node.Rejected semantics) (poised : node.Poised)
-    (computed : node.jumpSize? = some size) (timely : node.Timely)
+    (admissible : node.JumpSizeAdmissible size) (timely : node.Timely)
     (normal : node.InStrictNormalForm)
     (model : (node.jump size).Model semantics)
     (skipped : node.SkippedInvariantsHold size semantics model.signal) :
     node.HasModel semantics := by
   let signal := model.signal
   have childSatisfied : (node.jump size).SatisfiedBy semantics signal := model.satisfies
-  have positive := node.jumpSize_pos computed
+  have positive := admissible.1
   have locallyConsistent : node.erase.LocallyConsistent semantics := by
     by_contra inconsistent
     exact notRejected (Or.inr inconsistent)
@@ -70,7 +71,7 @@ theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size 
   have childHolds (occurrence : AnnotatedOccurrence Atom) (present : occurrence ∈ node.label)
       (temporal : occurrence.isTemporal = true) :
       occurrence.unmark.SatisfiedBy semantics updatedSignal (node.time + size) := by
-    have survives := node.temporal_survives_computed_jump poised timely computed occurrence
+    have survives := node.temporal_survives_admissible_jump poised timely admissible occurrence
       present temporal
     have childMem : occurrence.unmark ∈ (node.jump size).label := by
       change occurrence.unmark ∈ node.jumpLabel size
@@ -149,8 +150,8 @@ theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size 
           | eventually interval body =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.eventually interval body) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -158,8 +159,8 @@ theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size 
           | always interval body =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.always interval body) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -167,8 +168,8 @@ theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size 
           | strictUntil interval invariant target =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.strictUntil interval invariant target) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -177,8 +178,8 @@ theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size 
           | strictRelease interval target invariant =>
               have beforeLower := beforeLower_of_unmarked_temporal poised timely _ present
                 interval (.strictRelease interval target invariant) rfl rfl
-              have destinationLe := node.jump_destination_le_lower _ interval present rfl
-                computed beforeLower
+              have destinationLe := node.jump_destination_le_lower_of_admissible _ interval
+                present rfl admissible beforeLower
               have later := childHolds _ present (by
                 simp [AnnotatedOccurrence.isTemporal, Stlsat.Occurrence.isTemporal,
                   Stlsat.Formula.isTemporal])
@@ -212,6 +213,18 @@ theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size 
           · intro instant after before
             exact skippedUpdated _ present 1 invariant rfl instant (by omega) before
           · exact later
+
+/-- Compatibility wrapper for the conservative JUMP calculation. -/
+theorem hasModel_of_jump_of_model_of_skippedInvariants {node : Node Atom} {size : Nat}
+    {semantics : Stlsat.AtomicSemantics Atom}
+    (notRejected : ¬node.Rejected semantics) (poised : node.Poised)
+    (computed : node.jumpSize? = some size) (timely : node.Timely)
+    (normal : node.InStrictNormalForm)
+    (model : (node.jump size).Model semantics)
+    (skipped : node.SkippedInvariantsHold size semantics model.signal) :
+    node.HasModel semantics :=
+  node.hasModel_of_jump_of_model_of_skippedInvariants_of_admissible
+    notRejected poised (node.jumpSizeAdmissible_of_computed computed) timely normal model skipped
 
 /-- Backward model preservation in the convenient `HasModel` form. -/
 theorem hasModel_of_jump_of_skippedInvariants {node : Node Atom} {size : Nat}
